@@ -1,16 +1,20 @@
 import dotenv from 'dotenv';
 import { httpServer, io } from './server.js';
-import { GameState } from './game/GameState.js';
+import { GameStateManager } from './game/GameStateManager.js';
+import { generatePlayerName } from './utils/NameGenerator.js';
 
 dotenv.config();
 
-const gameState = new GameState();
+const gameState = new GameStateManager(io);
 const PORT = process.env.PORT || 3000;
 
 io.on('connection', (socket) => {
   console.log(`Player connected: ${socket.id}`);
 
+  // Create player with random name
   const newPlayer = gameState.addPlayer(socket.id);
+  newPlayer.name = generatePlayerName();
+
   const allPlayers = gameState.getAllPlayers();
 
   socket.emit('player:welcome', {
@@ -30,6 +34,16 @@ io.on('connection', (socket) => {
     });
   });
 
+  // NEW: Lobby ready toggle
+  socket.on('lobby:toggle-ready', () => {
+    gameState.togglePlayerReady(socket.id);
+  });
+
+  // NEW: Return to lobby from results (placeholder for future)
+  socket.on('results:return-to-lobby', () => {
+    gameState.returnToLobby();
+  });
+
   socket.on('disconnect', () => {
     console.log(`Player disconnected: ${socket.id}`);
     gameState.removePlayer(socket.id);
@@ -40,4 +54,5 @@ io.on('connection', (socket) => {
 
 httpServer.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  console.log('Lobby system ready - waiting for players...');
 });

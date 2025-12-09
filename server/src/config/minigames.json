@@ -1,0 +1,11 @@
+{
+  "obstacleDodge": {
+    "name": "Obstacle Dodge",
+    "initialBarSpeed": 150,
+    "barAcceleration": 10,
+    "spawnInterval": 2000,
+    "gapSize": 64,
+    "barWidth": 40,
+    "barHeight": 600
+  }
+}

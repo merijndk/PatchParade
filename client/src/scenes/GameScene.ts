@@ -24,8 +24,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
-    const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000';
-    this.socketManager = new SocketManager(serverUrl);
+    // Get the shared SocketManager from the registry
+    this.socketManager = this.registry.get('socketManager') as SocketManager;
 
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.wasdKeys = this.input.keyboard!.addKeys('W,A,S,D') as {
@@ -123,5 +123,10 @@ export class GameScene extends Phaser.Scene {
     const graphics = this.createPlayerGraphics(player.color);
     graphics.setPosition(player.x, player.y);
     this.remotePlayers.set(player.id, graphics);
+  }
+
+  shutdown(): void {
+    // Clean up socket listeners when scene is stopped
+    this.socketManager.removeAllListeners();
   }
 }

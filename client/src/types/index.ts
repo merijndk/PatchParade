@@ -52,6 +52,7 @@ export interface ServerToClientEvents {
   'player:moved': (data: { id: string; x: number; y: number }) => void;
   'lobby:player-ready-changed': (data: { playerId: string; isReady: boolean }) => void;
   'lobby:all-ready': () => void;
+  'lobby:state-sync': (players: Record<string, PlayerState>) => void;
   'game:phase-changed': (phase: GamePhase) => void;
   'game:countdown-tick': (count: number) => void;
   'game:started': (config: MinigameConfig) => void;

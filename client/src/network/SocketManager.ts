@@ -67,6 +67,10 @@ export class SocketManager {
     this.socket.on('lobby:all-ready', callback);
   }
 
+  onLobbyStateSync(callback: (players: Record<string, PlayerState>) => void): void {
+    this.socket.on('lobby:state-sync', callback);
+  }
+
   // Game phase events
   onPhaseChanged(callback: (phase: GamePhase) => void): void {
     this.socket.on('game:phase-changed', callback);
@@ -84,6 +88,7 @@ export class SocketManager {
     this.socket.off('player:moved');
     this.socket.off('lobby:player-ready-changed');
     this.socket.off('lobby:all-ready');
+    this.socket.off('lobby:state-sync');
     this.socket.off('game:phase-changed');
     this.socket.off('game:countdown-tick');
   }

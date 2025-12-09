@@ -100,6 +100,11 @@ export class GameStateManager {
   returnToLobby(): void {
     this.lobbyManager.resetReady();
     this.phaseManager.transitionTo('lobby' as GamePhase);
+
+    // Broadcast current player state to all clients
+    const allPlayers = this.getAllPlayers();
+    this.io.emit('lobby:state-sync', allPlayers);
+
     console.log('Returned to lobby');
   }
 

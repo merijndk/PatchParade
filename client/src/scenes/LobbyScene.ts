@@ -108,6 +108,21 @@ export class LobbyScene extends Phaser.Scene {
         this.scene.start('CountdownScene');
       }
     });
+
+    this.socketManager.onLobbyStateSync((players) => {
+      console.log('Received lobby state sync');
+
+      // Clear existing players
+      this.players.clear();
+
+      // Populate with synced player state
+      Object.values(players).forEach(player => {
+        this.players.set(player.id, player);
+      });
+
+      // Update the display
+      this.updatePlayerList();
+    });
   }
 
   toggleReady(): void {

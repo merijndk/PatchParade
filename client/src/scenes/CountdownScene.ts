@@ -55,9 +55,10 @@ export class CountdownScene extends Phaser.Scene {
       console.log('Phase changed to:', phase);
 
       if (phase === 'playing') {
-        // For now, since we don't have the minigame implemented,
-        // we'll just show a placeholder and return to lobby
-        this.showStartMessage();
+        // Start GameScene immediately so it can receive game:started event
+        this.scene.start('GameScene');
+      } else if (phase === 'results') {
+        // Game ended, will be handled by GameScene
       } else if (phase === 'lobby') {
         // Return to lobby
         this.scene.start('LobbyScene');

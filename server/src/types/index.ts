@@ -6,6 +6,7 @@ export interface PlayerState {
   color: number;
   isReady: boolean;
   isAlive: boolean;
+  points: number;
 }
 
 export enum GamePhase {
@@ -42,6 +43,8 @@ export interface GameResults {
     playerId: string;
     playerName: string;
     survivalTime: number;
+    pointsAwarded: number;
+    totalPoints: number;
   }>;
 }
 
@@ -55,16 +58,18 @@ export interface ServerToClientEvents {
   'lobby:state-sync': (players: Record<string, PlayerState>) => void;
   'game:phase-changed': (phase: GamePhase) => void;
   'game:countdown-tick': (count: number) => void;
-  'game:started': (config: MinigameConfig) => void;
+  'game:started': (data: { config: MinigameConfig; players: Record<string, PlayerState> }) => void;
   'game:ended': (results: GameResults) => void;
-  'minigame:obstacle-spawned': (obstacle: ObstacleState) => void;
-  'minigame:obstacle-updated': (data: { id: string; x: number; speed: number }) => void;
-  'minigame:obstacle-removed': (obstacleId: string) => void;
-  'minigame:player-died': (data: { playerId: string; timestamp: number }) => void;
+  'minigame:obstacle-dodge:obstacle-spawn': (obstacle: ObstacleState) => void;
+  'minigame:obstacle-dodge:obstacle-update': (data: { id: string; x: number; speed: number }) => void;
+  'minigame:obstacle-dodge:obstacle-remove': (obstacleId: string) => void;
+  'minigame:obstacle-dodge:player-death': (data: { playerId: string; timestamp: number }) => void;
 }
 
 export interface ClientToServerEvents {
   'player:move': (position: { x: number; y: number }) => void;
   'lobby:toggle-ready': () => void;
+  'lobby:request-state': () => void;
   'results:return-to-lobby': () => void;
+  'minigame:ready': () => void;
 }

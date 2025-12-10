@@ -37,8 +37,16 @@ export class SocketManager {
     this.socket.emit('lobby:toggle-ready');
   }
 
+  requestLobbyState(): void {
+    this.socket.emit('lobby:request-state');
+  }
+
   sendReturnToLobby(): void {
     this.socket.emit('results:return-to-lobby');
+  }
+
+  sendMinigameReady(): void {
+    this.socket.emit('minigame:ready');
   }
 
   // Player events
@@ -80,6 +88,32 @@ export class SocketManager {
     this.socket.on('game:countdown-tick', callback);
   }
 
+  // Game events
+  onGameStarted(callback: (data: { config: import('../types').MinigameConfig; players: Record<string, import('../types').PlayerState> }) => void): void {
+    this.socket.on('game:started', callback);
+  }
+
+  onGameEnded(callback: (results: import('../types').GameResults) => void): void {
+    this.socket.on('game:ended', callback);
+  }
+
+  // Obstacle events
+  onObstacleSpawn(callback: (obstacle: import('../types').ObstacleState) => void): void {
+    this.socket.on('minigame:obstacle-dodge:obstacle-spawn', callback);
+  }
+
+  onObstacleUpdate(callback: (data: { id: string; x: number; speed: number }) => void): void {
+    this.socket.on('minigame:obstacle-dodge:obstacle-update', callback);
+  }
+
+  onObstacleRemove(callback: (obstacleId: string) => void): void {
+    this.socket.on('minigame:obstacle-dodge:obstacle-remove', callback);
+  }
+
+  onPlayerDeath(callback: (data: { playerId: string; timestamp: number }) => void): void {
+    this.socket.on('minigame:obstacle-dodge:player-death', callback);
+  }
+
   // Clean up all event listeners (but keep socket connection alive)
   removeAllListeners(): void {
     this.socket.off('player:welcome');
@@ -91,6 +125,12 @@ export class SocketManager {
     this.socket.off('lobby:state-sync');
     this.socket.off('game:phase-changed');
     this.socket.off('game:countdown-tick');
+    this.socket.off('game:started');
+    this.socket.off('game:ended');
+    this.socket.off('minigame:obstacle-dodge:obstacle-spawn');
+    this.socket.off('minigame:obstacle-dodge:obstacle-update');
+    this.socket.off('minigame:obstacle-dodge:obstacle-remove');
+    this.socket.off('minigame:obstacle-dodge:player-death');
   }
 
   disconnect(): void {

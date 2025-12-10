@@ -19,6 +19,9 @@ export class LobbyScene extends Phaser.Scene {
     // Get the shared SocketManager from the registry
     this.socketManager = this.registry.get('socketManager') as SocketManager;
 
+    // Set up socket listeners FIRST, before creating UI
+    this.setupSocketListeners();
+
     // Title
     this.add.text(400, 50, 'PATCHPARADE LOBBY', {
       fontSize: '32px',
@@ -54,13 +57,17 @@ export class LobbyScene extends Phaser.Scene {
       color: '#aaaaaa'
     }).setOrigin(0.5);
 
-    this.setupSocketListeners();
+    // After everything is set up, request current lobby state
+    this.socketManager.requestLobbyState();
   }
 
   setupSocketListeners(): void {
     this.socketManager.onWelcome((data) => {
       this.localPlayerId = data.playerId;
       console.log('Welcome! My ID:', this.localPlayerId);
+
+      // Store player ID in registry for other scenes to use
+      this.registry.set('localPlayerId', data.playerId);
 
       Object.values(data.players).forEach(player => {
         this.players.set(player.id, player);

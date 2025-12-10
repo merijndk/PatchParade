@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { LobbyScene } from './scenes/LobbyScene';
 import { CountdownScene } from './scenes/CountdownScene';
 import { GameScene } from './scenes/GameScene';
+import { ResultsScene } from './scenes/ResultsScene';
 import { SocketManager } from './network/SocketManager';
 
 const config: Phaser.Types.Core.GameConfig = {
@@ -10,7 +11,7 @@ const config: Phaser.Types.Core.GameConfig = {
   height: 600,
   backgroundColor: '#2d2d2d',
   parent: 'game-container',
-  scene: [LobbyScene, CountdownScene, GameScene],
+  scene: [LobbyScene, CountdownScene, GameScene, ResultsScene],
   physics: {
     default: 'arcade',
     arcade: {

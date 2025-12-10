@@ -39,9 +39,21 @@ io.on('connection', (socket) => {
     gameState.togglePlayerReady(socket.id);
   });
 
+  // NEW: Request current lobby state
+  socket.on('lobby:request-state', () => {
+    const allPlayers = gameState.getAllPlayers();
+    socket.emit('lobby:state-sync', allPlayers);
+  });
+
   // NEW: Return to lobby from results (placeholder for future)
   socket.on('results:return-to-lobby', () => {
     gameState.returnToLobby();
+  });
+
+  // Minigame ready signal from client
+  socket.on('minigame:ready', () => {
+    console.log(`Received minigame:ready from player ${socket.id}`);
+    gameState.onMinigameReady(socket.id);
   });
 
   socket.on('disconnect', () => {

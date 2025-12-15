@@ -11,7 +11,10 @@ export class LobbyScene extends Phaser.Scene {
   private players: Map<string, PlayerState> = new Map();
   private localPlayerId: string = '';
   private isLocalPlayerReady: boolean = false;
-  private nameInput!: HTMLInputElement;
+  private nameInputBox!: Phaser.GameObjects.Rectangle;
+  private nameInputText!: Phaser.GameObjects.Text;
+  private nameInputActive: boolean = false;
+  private currentNameInput: string = '';
   private changeNameButton!: Phaser.GameObjects.Text;
 
   constructor() {
@@ -33,41 +36,47 @@ export class LobbyScene extends Phaser.Scene {
 
     // Name change UI
     this.add.text(400, 100, 'Change Name:', {
-      fontSize: '16px',
+      fontSize: '18px',
       color: '#ffffff'
     }).setOrigin(0.5);
 
-    const canvas = this.sys.game.canvas;
-    const canvasRect = canvas.getBoundingClientRect();
+    this.nameInputBox = this.add.rectangle(320, 130, 200, 40, 0x333333)
+      .setStrokeStyle(2, 0x666666)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.activateNameInput());
 
-    this.nameInput = document.createElement('input');
-    this.nameInput.type = 'text';
-    this.nameInput.placeholder = 'Enter new name';
-    this.nameInput.maxLength = 20;
-    this.nameInput.style.position = 'absolute';
-    this.nameInput.style.left = `${canvasRect.left + 250}px`;
-    this.nameInput.style.top = `${canvasRect.top + 120}px`;
-    this.nameInput.style.width = '160px';
-    this.nameInput.style.padding = '5px';
-    this.nameInput.style.fontSize = '14px';
-    this.nameInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        this.changeName();
-      }
-    });
-    document.body.appendChild(this.nameInput);
-
-    this.changeNameButton = this.add.text(530, 130, 'Change', {
+    this.nameInputText = this.add.text(320, 130, 'Click to type...', {
       fontSize: '16px',
+      color: '#888888'
+    }).setOrigin(0.5);
+
+    this.changeNameButton = this.add.text(480, 130, 'Change', {
+      fontSize: '18px',
       color: '#ffffff',
       backgroundColor: '#0066cc',
-      padding: { left: 10, right: 10, top: 5, bottom: 5 }
+      padding: { left: 15, right: 15, top: 8, bottom: 8 }
     })
     .setOrigin(0.5)
     .setInteractive({ useHandCursor: true })
     .on('pointerdown', () => this.changeName())
     .on('pointerover', () => this.changeNameButton.setStyle({ backgroundColor: '#0088ff' }))
     .on('pointerout', () => this.changeNameButton.setStyle({ backgroundColor: '#0066cc' }));
+
+    this.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
+      if (!this.nameInputActive) return;
+
+      if (event.key === 'Enter') {
+        this.changeName();
+      } else if (event.key === 'Backspace') {
+        this.currentNameInput = this.currentNameInput.slice(0, -1);
+        this.updateNameInputDisplay();
+      } else if (event.key === 'Escape') {
+        this.deactivateNameInput();
+      } else if (event.key.length === 1 && this.currentNameInput.length < 20) {
+        this.currentNameInput += event.key;
+        this.updateNameInputDisplay();
+      }
+    });
 
     // Player list
     this.playerListText = this.add.text(400, 240, '', {
@@ -181,11 +190,36 @@ export class LobbyScene extends Phaser.Scene {
     });
   }
 
+  activateNameInput(): void {
+    this.nameInputActive = true;
+    this.nameInputBox.setStrokeStyle(2, 0x0088ff);
+    this.currentNameInput = '';
+    this.updateNameInputDisplay();
+  }
+
+  deactivateNameInput(): void {
+    this.nameInputActive = false;
+    this.nameInputBox.setStrokeStyle(2, 0x666666);
+    this.currentNameInput = '';
+    this.nameInputText.setText('Click to type...');
+    this.nameInputText.setStyle({ color: '#888888' });
+  }
+
+  updateNameInputDisplay(): void {
+    if (this.currentNameInput.length === 0) {
+      this.nameInputText.setText('Click to type...');
+      this.nameInputText.setStyle({ color: '#888888' });
+    } else {
+      this.nameInputText.setText(this.currentNameInput);
+      this.nameInputText.setStyle({ color: '#ffffff' });
+    }
+  }
+
   changeName(): void {
-    const newName = this.nameInput.value.trim();
+    const newName = this.currentNameInput.trim();
     if (newName.length > 0) {
       this.socketManager.sendChangeName(newName);
-      this.nameInput.value = '';
+      this.deactivateNameInput();
     }
   }
 
@@ -231,9 +265,6 @@ export class LobbyScene extends Phaser.Scene {
   }
 
   shutdown(): void {
-    if (this.nameInput && this.nameInput.parentElement) {
-      document.body.removeChild(this.nameInput);
-    }
     this.playerTextObjects.forEach(textObj => textObj.destroy());
     this.playerTextObjects = [];
     this.socketManager.removeAllListeners();

@@ -40,17 +40,17 @@ export class LobbyScene extends Phaser.Scene {
       color: '#ffffff'
     }).setOrigin(0.5);
 
-    this.nameInputBox = this.add.rectangle(320, 130, 200, 40, 0x333333)
+    this.nameInputBox = this.add.rectangle(320, 145, 200, 40, 0x333333)
       .setStrokeStyle(2, 0x666666)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.activateNameInput());
 
-    this.nameInputText = this.add.text(320, 130, 'Click to type...', {
+    this.nameInputText = this.add.text(320, 145, 'Click to type...', {
       fontSize: '16px',
       color: '#888888'
     }).setOrigin(0.5);
 
-    this.changeNameButton = this.add.text(480, 130, 'Change', {
+    this.changeNameButton = this.add.text(480, 145, 'Change', {
       fontSize: '18px',
       color: '#ffffff',
       backgroundColor: '#0066cc',
@@ -236,14 +236,17 @@ export class LobbyScene extends Phaser.Scene {
     // Update header
     this.playerListText.setText(`Players (${this.players.size}):`);
 
-    // Create individual text objects for each player
-    let yOffset = 260;
-    this.players.forEach(player => {
-      const readyStatus = player.isReady ? '[READY]' : '[NOT READY]';
-      const youMarker = player.id === this.localPlayerId ? ' (You)' : '';
-      const color = player.isReady ? '#00ff00' : '#ff0000';
+    // Sort players by points (descending)
+    const sortedPlayers = Array.from(this.players.values()).sort((a, b) => b.points - a.points);
 
-      const playerText = this.add.text(400, yOffset, `${player.name}${youMarker} ${readyStatus}`, {
+    // Create individual text objects for each player
+    let yOffset = 280;
+    sortedPlayers.forEach(player => {
+      const color = player.isReady ? '#00ff00' : '#ffffff';
+      const pointsDisplay = ` - ${player.points} pts`;
+      const youMarker = player.id === this.localPlayerId ? ' (You)' : '';
+
+      const playerText = this.add.text(400, yOffset, `${player.name}${youMarker}${pointsDisplay}`, {
         fontSize: '20px',
         color: color,
         align: 'center'

@@ -88,6 +88,14 @@ export class GameStateManager {
     }
   }
 
+  changePlayerName(id: string, name: string): void {
+    const player = this.players.get(id);
+    if (player) {
+      player.name = name.trim() || player.name;
+      this.io.emit("player:name-changed", { playerId: id, name: player.name });
+    }
+  }
+
   getPlayer(id: string): PlayerState | undefined {
     return this.players.get(id);
   }

@@ -32,6 +32,10 @@ export class SocketManager {
     this.socket.emit('player:move', { x, y });
   }
 
+  sendChangeName(name: string): void {
+    this.socket.emit('player:change-name', name);
+  }
+
   // Lobby events
   sendToggleReady(): void {
     this.socket.emit('lobby:toggle-ready');
@@ -64,6 +68,10 @@ export class SocketManager {
 
   onPlayerMoved(callback: (data: { id: string; x: number; y: number }) => void): void {
     this.socket.on('player:moved', callback);
+  }
+
+  onPlayerNameChanged(callback: (data: { playerId: string; name: string }) => void): void {
+    this.socket.on('player:name-changed', callback);
   }
 
   // Lobby ready events
@@ -120,6 +128,7 @@ export class SocketManager {
     this.socket.off('player:joined');
     this.socket.off('player:left');
     this.socket.off('player:moved');
+    this.socket.off('player:name-changed');
     this.socket.off('lobby:player-ready-changed');
     this.socket.off('lobby:all-ready');
     this.socket.off('lobby:state-sync');

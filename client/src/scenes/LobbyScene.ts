@@ -10,6 +10,8 @@ export class LobbyScene extends Phaser.Scene {
   private players: Map<string, PlayerState> = new Map();
   private localPlayerId: string = '';
   private isLocalPlayerReady: boolean = false;
+  private nameInput!: HTMLInputElement;
+  private changeNameButton!: Phaser.GameObjects.Text;
 
   constructor() {
     super({ key: 'LobbyScene' });
@@ -28,8 +30,46 @@ export class LobbyScene extends Phaser.Scene {
       color: '#ffffff'
     }).setOrigin(0.5);
 
+    // Name change UI
+    this.add.text(400, 100, 'Change Name:', {
+      fontSize: '16px',
+      color: '#ffffff'
+    }).setOrigin(0.5);
+
+    const canvas = this.sys.game.canvas;
+    const canvasRect = canvas.getBoundingClientRect();
+
+    this.nameInput = document.createElement('input');
+    this.nameInput.type = 'text';
+    this.nameInput.placeholder = 'Enter new name';
+    this.nameInput.maxLength = 20;
+    this.nameInput.style.position = 'absolute';
+    this.nameInput.style.left = `${canvasRect.left + 250}px`;
+    this.nameInput.style.top = `${canvasRect.top + 120}px`;
+    this.nameInput.style.width = '160px';
+    this.nameInput.style.padding = '5px';
+    this.nameInput.style.fontSize = '14px';
+    this.nameInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        this.changeName();
+      }
+    });
+    document.body.appendChild(this.nameInput);
+
+    this.changeNameButton = this.add.text(530, 130, 'Change', {
+      fontSize: '16px',
+      color: '#ffffff',
+      backgroundColor: '#0066cc',
+      padding: { left: 10, right: 10, top: 5, bottom: 5 }
+    })
+    .setOrigin(0.5)
+    .setInteractive({ useHandCursor: true })
+    .on('pointerdown', () => this.changeName())
+    .on('pointerover', () => this.changeNameButton.setStyle({ backgroundColor: '#0088ff' }))
+    .on('pointerout', () => this.changeNameButton.setStyle({ backgroundColor: '#0066cc' }));
+
     // Player list
-    this.playerListText = this.add.text(400, 200, '', {
+    this.playerListText = this.add.text(400, 240, '', {
       fontSize: '20px',
       color: '#ffffff',
       align: 'center'
@@ -130,6 +170,22 @@ export class LobbyScene extends Phaser.Scene {
       // Update the display
       this.updatePlayerList();
     });
+
+    this.socketManager.onPlayerNameChanged((data) => {
+      const player = this.players.get(data.playerId);
+      if (player) {
+        player.name = data.name;
+        this.updatePlayerList();
+      }
+    });
+  }
+
+  changeName(): void {
+    const newName = this.nameInput.value.trim();
+    if (newName.length > 0) {
+      this.socketManager.sendChangeName(newName);
+      this.nameInput.value = '';
+    }
   }
 
   toggleReady(): void {
@@ -160,7 +216,9 @@ export class LobbyScene extends Phaser.Scene {
   }
 
   shutdown(): void {
-    // Clean up socket listeners when scene is stopped
+    if (this.nameInput && this.nameInput.parentElement) {
+      document.body.removeChild(this.nameInput);
+    }
     this.socketManager.removeAllListeners();
   }
 }

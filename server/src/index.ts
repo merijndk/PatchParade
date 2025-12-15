@@ -34,6 +34,10 @@ io.on('connection', (socket) => {
     });
   });
 
+  socket.on('player:change-name', (name) => {
+    gameState.changePlayerName(socket.id, name);
+  });
+
   // NEW: Lobby ready toggle
   socket.on('lobby:toggle-ready', () => {
     gameState.togglePlayerReady(socket.id);

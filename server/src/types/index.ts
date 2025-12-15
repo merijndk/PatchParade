@@ -53,6 +53,7 @@ export interface ServerToClientEvents {
   'player:joined': (player: PlayerState) => void;
   'player:left': (playerId: string) => void;
   'player:moved': (data: { id: string; x: number; y: number }) => void;
+  'player:name-changed': (data: { playerId: string; name: string }) => void;
   'lobby:player-ready-changed': (data: { playerId: string; isReady: boolean }) => void;
   'lobby:all-ready': () => void;
   'lobby:state-sync': (players: Record<string, PlayerState>) => void;
@@ -68,6 +69,7 @@ export interface ServerToClientEvents {
 
 export interface ClientToServerEvents {
   'player:move': (position: { x: number; y: number }) => void;
+  'player:change-name': (name: string) => void;
   'lobby:toggle-ready': () => void;
   'lobby:request-state': () => void;
   'results:return-to-lobby': () => void;

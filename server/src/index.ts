@@ -20,6 +20,7 @@ io.on('connection', (socket) => {
   socket.emit('player:welcome', {
     playerId: socket.id,
     players: allPlayers,
+    availableMinigames: gameState.getAvailableMinigames(),
   });
 
   socket.broadcast.emit('player:joined', newPlayer);
@@ -41,6 +42,11 @@ io.on('connection', (socket) => {
   // NEW: Lobby ready toggle
   socket.on('lobby:toggle-ready', () => {
     gameState.togglePlayerReady(socket.id);
+  });
+
+  // NEW: Vote for minigame
+  socket.on('lobby:vote-minigame', (minigameId) => {
+    gameState.voteForMinigame(socket.id, minigameId);
   });
 
   // NEW: Request current lobby state

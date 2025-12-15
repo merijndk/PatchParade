@@ -37,6 +37,11 @@ export interface MinigameConfig {
   barHeight: number;
 }
 
+export interface MinigameInfo {
+  id: string;
+  name: string;
+}
+
 export interface GameResults {
   winner: string | null;
   rankings: Array<{
@@ -49,7 +54,7 @@ export interface GameResults {
 }
 
 export interface ServerToClientEvents {
-  'player:welcome': (data: { playerId: string; players: Record<string, PlayerState> }) => void;
+  'player:welcome': (data: { playerId: string; players: Record<string, PlayerState>; availableMinigames: MinigameInfo[] }) => void;
   'player:joined': (player: PlayerState) => void;
   'player:left': (playerId: string) => void;
   'player:moved': (data: { id: string; x: number; y: number }) => void;
@@ -57,6 +62,8 @@ export interface ServerToClientEvents {
   'lobby:player-ready-changed': (data: { playerId: string; isReady: boolean }) => void;
   'lobby:all-ready': () => void;
   'lobby:state-sync': (players: Record<string, PlayerState>) => void;
+  'lobby:vote-changed': (data: { playerId: string; minigameId: string | null }) => void;
+  'lobby:vote-tally': (data: { votes: Record<string, number>; selectedMinigame: string | null }) => void;
   'game:phase-changed': (phase: GamePhase) => void;
   'game:countdown-tick': (count: number) => void;
   'game:started': (data: { config: MinigameConfig; players: Record<string, PlayerState> }) => void;
@@ -71,6 +78,7 @@ export interface ClientToServerEvents {
   'player:move': (position: { x: number; y: number }) => void;
   'player:change-name': (name: string) => void;
   'lobby:toggle-ready': () => void;
+  'lobby:vote-minigame': (minigameId: string) => void;
   'results:return-to-lobby': () => void;
   'minigame:ready': () => void;
 }

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { SocketManager } from '../network/SocketManager';
-import type { PlayerState } from '../types';
+import type { PlayerState, MinigameInfo } from '../types';
 
 export class LobbyScene extends Phaser.Scene {
   private socketManager!: SocketManager;
@@ -17,6 +17,12 @@ export class LobbyScene extends Phaser.Scene {
   private nameInputActive: boolean = false;
   private currentNameInput: string = '';
   private changeNameButton!: Phaser.GameObjects.Text;
+  private availableMinigames: MinigameInfo[] = [];
+  private voteTally: Record<string, number> = {};
+  private selectedMinigame: string | null = null;
+  private minigameButtons: Phaser.GameObjects.Text[] = [];
+  private voteCountTexts: Phaser.GameObjects.Text[] = [];
+  private currentVote: string | null = null;
 
   constructor() {
     super({ key: 'LobbyScene' });
@@ -108,6 +114,12 @@ export class LobbyScene extends Phaser.Scene {
       color: '#aaaaaa'
     }).setOrigin(0.5);
 
+    // Game selection title (will be positioned after we know how many games there are)
+    this.add.text(400, 190, 'Vote for a Minigame:', {
+      fontSize: '18px',
+      color: '#ffffff'
+    }).setOrigin(0.5);
+
     // After everything is set up, request current lobby state
     this.socketManager.requestLobbyState();
   }
@@ -123,6 +135,10 @@ export class LobbyScene extends Phaser.Scene {
       Object.values(data.players).forEach(player => {
         this.players.set(player.id, player);
       });
+
+      this.availableMinigames = data.availableMinigames;
+      this.createMinigameButtons();
+
       this.updatePlayerList();
     });
 
@@ -188,6 +204,21 @@ export class LobbyScene extends Phaser.Scene {
         player.name = data.name;
         this.updatePlayerList();
       }
+    });
+
+    this.socketManager.onVoteChanged((data) => {
+      console.log(`Player ${data.playerId} voted for ${data.minigameId}`);
+      if (data.playerId === this.localPlayerId) {
+        this.currentVote = data.minigameId;
+        this.updateMinigameButtons();
+      }
+    });
+
+    this.socketManager.onVoteTally((data) => {
+      console.log('Vote tally updated:', data);
+      this.voteTally = data.votes;
+      this.selectedMinigame = data.selectedMinigame;
+      this.updateVoteCounts();
     });
   }
 
@@ -296,11 +327,89 @@ export class LobbyScene extends Phaser.Scene {
     }
   }
 
+  createMinigameButtons(): void {
+    this.minigameButtons.forEach(btn => btn.destroy());
+    this.minigameButtons = [];
+    this.voteCountTexts.forEach(txt => txt.destroy());
+    this.voteCountTexts = [];
+
+    const startX = 400 - (this.availableMinigames.length * 120) / 2;
+    const startY = 215;
+
+    this.availableMinigames.forEach((minigame, index) => {
+      const x = startX + index * 120;
+
+      const button = this.add.text(x, startY, minigame.name, {
+        fontSize: '16px',
+        color: '#ffffff',
+        backgroundColor: '#444444',
+        padding: { left: 12, right: 12, top: 8, bottom: 8 }
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.voteForMinigame(minigame.id))
+      .on('pointerover', () => {
+        if (this.currentVote !== minigame.id) {
+          button.setStyle({ backgroundColor: '#666666' });
+        }
+      })
+      .on('pointerout', () => {
+        if (this.currentVote !== minigame.id) {
+          button.setStyle({ backgroundColor: '#444444' });
+        }
+      });
+
+      this.minigameButtons.push(button);
+
+      const voteCountText = this.add.text(x, startY + 25, '0 votes', {
+        fontSize: '12px',
+        color: '#aaaaaa'
+      }).setOrigin(0.5);
+
+      this.voteCountTexts.push(voteCountText);
+    });
+  }
+
+  voteForMinigame(minigameId: string): void {
+    this.socketManager.sendVoteMinigame(minigameId);
+  }
+
+  updateMinigameButtons(): void {
+    this.availableMinigames.forEach((minigame, index) => {
+      const button = this.minigameButtons[index];
+      if (this.currentVote === minigame.id) {
+        button.setStyle({ backgroundColor: '#0066cc' });
+      } else {
+        button.setStyle({ backgroundColor: '#444444' });
+      }
+    });
+  }
+
+  updateVoteCounts(): void {
+    this.availableMinigames.forEach((minigame, index) => {
+      const voteCount = this.voteTally[minigame.id] || 0;
+      const voteCountText = this.voteCountTexts[index];
+
+      const voteLabel = voteCount === 1 ? 'vote' : 'votes';
+      voteCountText.setText(`${voteCount} ${voteLabel}`);
+
+      if (this.selectedMinigame === minigame.id && Object.keys(this.voteTally).length > 0) {
+        voteCountText.setStyle({ color: '#00ff00' });
+      } else {
+        voteCountText.setStyle({ color: '#aaaaaa' });
+      }
+    });
+  }
+
   shutdown(): void {
     this.playerTextObjects.forEach(textObj => textObj.destroy());
     this.playerTextObjects = [];
     this.playerColorBalls.forEach(ball => ball.destroy());
     this.playerColorBalls = [];
+    this.minigameButtons.forEach(btn => btn.destroy());
+    this.minigameButtons = [];
+    this.voteCountTexts.forEach(txt => txt.destroy());
+    this.voteCountTexts = [];
     this.socketManager.removeAllListeners();
   }
 }

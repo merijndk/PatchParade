@@ -1,5 +1,5 @@
 import type { Server } from 'socket.io';
-import type { PlayerState, ServerToClientEvents, ClientToServerEvents, GamePhase, MinigameConfig, GameResults } from '../types/index.js';
+import type { PlayerState, ServerToClientEvents, ClientToServerEvents, GamePhase, MinigameConfig, GameResults, MinigameInfo } from '../types/index.js';
 import { LobbyManager } from './LobbyManager.js';
 import { GamePhaseManager } from './GamePhaseManager.js';
 import { ObstacleManager } from './ObstacleManager.js';
@@ -49,6 +49,8 @@ export class GameStateManager {
 
   removePlayer(id: string): void {
     this.players.delete(id);
+
+    this.lobbyManager.removePlayerVote(id);
 
     // If we're in lobby and someone leaves, check if we need to cancel countdown
     if (this.phaseManager.getCurrentPhase() === 'lobby' ||
@@ -109,6 +111,29 @@ export class GameStateManager {
   }
 
   // Lobby management
+  getAvailableMinigames(): MinigameInfo[] {
+    const minigameIds = ConfigLoader.getAllMinigames();
+    const minigames = minigameIds.map(id => {
+      const config = ConfigLoader.getConfig(id);
+      return { id, name: config.name };
+    });
+
+    minigames.push({ id: 'random', name: 'Random' });
+
+    return minigames;
+  }
+
+  voteForMinigame(playerId: string, minigameId: string): void {
+    this.lobbyManager.voteForMinigame(playerId, minigameId);
+    this.io.emit('lobby:vote-changed', { playerId, minigameId });
+
+    const tally = this.lobbyManager.tallyVotes();
+    this.io.emit('lobby:vote-tally', tally);
+
+    console.log(`Player ${playerId} voted for ${minigameId}`);
+    console.log('Vote tally:', tally);
+  }
+
   togglePlayerReady(id: string): void {
     const isReady = this.lobbyManager.togglePlayerReady(id);
     this.io.emit('lobby:player-ready-changed', { playerId: id, isReady });
@@ -127,8 +152,18 @@ export class GameStateManager {
   private startGame(): void {
     this.phaseManager.startCountdown(() => {
       this.phaseManager.transitionTo('playing' as GamePhase);
-      console.log('Starting minigame: obstacleDodge');
-      this.startMinigame('obstacleDodge');
+
+      const tally = this.lobbyManager.tallyVotes();
+      let selectedMinigame = tally.selectedMinigame || 'obstacleDodge';
+
+      if (selectedMinigame === 'random') {
+        const availableMinigames = ConfigLoader.getAllMinigames();
+        selectedMinigame = availableMinigames[Math.floor(Math.random() * availableMinigames.length)];
+        console.log(`Random selected: ${selectedMinigame}`);
+      }
+
+      console.log(`Starting minigame: ${selectedMinigame}`);
+      this.startMinigame(selectedMinigame);
     });
   }
 
@@ -364,6 +399,7 @@ export class GameStateManager {
 
   returnToLobby(): void {
     this.lobbyManager.resetReady();
+    this.lobbyManager.resetVotes();
     this.phaseManager.transitionTo('lobby' as GamePhase);
 
     // Broadcast current player state to all clients

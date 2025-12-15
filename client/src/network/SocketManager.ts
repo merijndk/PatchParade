@@ -53,8 +53,12 @@ export class SocketManager {
     this.socket.emit('minigame:ready');
   }
 
+  sendVoteMinigame(minigameId: string): void {
+    this.socket.emit('lobby:vote-minigame', minigameId);
+  }
+
   // Player events
-  onWelcome(callback: (data: { playerId: string; players: Record<string, PlayerState> }) => void): void {
+  onWelcome(callback: (data: { playerId: string; players: Record<string, PlayerState>; availableMinigames: import('../types').MinigameInfo[] }) => void): void {
     this.socket.on('player:welcome', callback);
   }
 
@@ -85,6 +89,14 @@ export class SocketManager {
 
   onLobbyStateSync(callback: (players: Record<string, PlayerState>) => void): void {
     this.socket.on('lobby:state-sync', callback);
+  }
+
+  onVoteChanged(callback: (data: { playerId: string; minigameId: string | null }) => void): void {
+    this.socket.on('lobby:vote-changed', callback);
+  }
+
+  onVoteTally(callback: (data: { votes: Record<string, number>; selectedMinigame: string | null }) => void): void {
+    this.socket.on('lobby:vote-tally', callback);
   }
 
   // Game phase events
@@ -132,6 +144,8 @@ export class SocketManager {
     this.socket.off('lobby:player-ready-changed');
     this.socket.off('lobby:all-ready');
     this.socket.off('lobby:state-sync');
+    this.socket.off('lobby:vote-changed');
+    this.socket.off('lobby:vote-tally');
     this.socket.off('game:phase-changed');
     this.socket.off('game:countdown-tick');
     this.socket.off('game:started');

@@ -89,6 +89,13 @@ export class LobbyScene extends Phaser.Scene {
       color: '#ffffff'
     }).setOrigin(0.5);
 
+    // Try to get available minigames from registry (persists across scenes)
+    const storedMinigames = this.registry.get('availableMinigames') as MinigameInfo[] | undefined;
+    if (storedMinigames && storedMinigames.length > 0) {
+      this.availableMinigames = storedMinigames;
+      this.createMinigameButtons();
+    }
+
     // After everything is set up, request current lobby state
     this.socketManager.requestLobbyState();
   }
@@ -106,6 +113,8 @@ export class LobbyScene extends Phaser.Scene {
       });
 
       this.availableMinigames = data.availableMinigames;
+      // Store in registry so it persists across scene transitions
+      this.registry.set('availableMinigames', data.availableMinigames);
       this.createMinigameButtons();
 
       this.updatePlayerList();
@@ -187,6 +196,13 @@ export class LobbyScene extends Phaser.Scene {
       console.log('Vote tally updated:', data);
       this.voteTally = data.votes;
       this.selectedMinigame = data.selectedMinigame;
+
+      // Reset current vote if votes were cleared (returning to lobby)
+      if (Object.keys(data.votes).length === 0) {
+        this.currentVote = null;
+        this.updateMinigameButtons();
+      }
+
       this.updateVoteCounts();
     });
   }

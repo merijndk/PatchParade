@@ -111,20 +111,21 @@ export class GameScene extends Phaser.Scene {
           this.localPlayerY = player.y;
           this.localPlayerColor = player.color;
 
-          if (!this.localPlayer) {
-            this.localPlayer = this.createPlayerGraphics(player.color);
+          // Always create a fresh graphics object
+          if (this.localPlayer) {
+            this.localPlayer.destroy();
           }
+          this.localPlayer = this.createPlayerGraphics(player.color);
           this.localPlayer.setPosition(this.localPlayerX, this.localPlayerY);
-          this.localPlayer.setAlpha(1); // Reset alpha in case player was dead previously
         } else {
           // Create or update remote player
           let remotePlayer = this.remotePlayers.get(id);
-          if (!remotePlayer) {
-            remotePlayer = this.createPlayerGraphics(player.color);
-            this.remotePlayers.set(id, remotePlayer);
+          if (remotePlayer) {
+            remotePlayer.destroy();
           }
+          remotePlayer = this.createPlayerGraphics(player.color);
+          this.remotePlayers.set(id, remotePlayer);
           remotePlayer.setPosition(player.x, player.y);
-          remotePlayer.setAlpha(1); // Reset alpha in case player was dead previously
         }
       });
 
@@ -285,5 +286,18 @@ export class GameScene extends Phaser.Scene {
   shutdown(): void {
     // Clean up socket listeners when scene is stopped
     this.socketManager.removeAllListeners();
+
+    // Destroy all graphics objects
+    if (this.localPlayer) {
+      this.localPlayer.destroy();
+    }
+
+    this.remotePlayers.forEach(player => player.destroy());
+    this.remotePlayers.clear();
+
+    this.obstacles.forEach(obstacle => obstacle.graphics.destroy());
+    this.obstacles.clear();
+
+    this.deadPlayers.clear();
   }
 }

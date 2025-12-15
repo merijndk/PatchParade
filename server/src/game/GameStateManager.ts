@@ -1,9 +1,17 @@
-import type { Server } from 'socket.io';
-import type { PlayerState, ServerToClientEvents, ClientToServerEvents, GamePhase, MinigameConfig, GameResults, MinigameInfo } from '../types/index.js';
-import { LobbyManager } from './LobbyManager.js';
-import { GamePhaseManager } from './GamePhaseManager.js';
-import { ObstacleManager } from './ObstacleManager.js';
-import { ConfigLoader } from '../config/ConfigLoader.js';
+import type { Server } from "socket.io";
+import type {
+  PlayerState,
+  ServerToClientEvents,
+  ClientToServerEvents,
+  GamePhase,
+  MinigameConfig,
+  GameResults,
+  MinigameInfo,
+} from "../types/index.js";
+import { LobbyManager } from "./LobbyManager.js";
+import { GamePhaseManager } from "./GamePhaseManager.js";
+import { ObstacleManager } from "./ObstacleManager.js";
+import { ConfigLoader } from "../config/ConfigLoader.js";
 
 export class GameStateManager {
   private players: Map<string, PlayerState> = new Map();
@@ -34,7 +42,7 @@ export class GameStateManager {
   addPlayer(id: string): PlayerState {
     const player: PlayerState = {
       id,
-      name: '', // Will be set by caller
+      name: "", // Will be set by caller
       x: this.generateRandomX(),
       y: this.generateRandomY(),
       color: this.generateRandomColor(),
@@ -53,8 +61,10 @@ export class GameStateManager {
     this.lobbyManager.removePlayerVote(id);
 
     // If we're in lobby and someone leaves, check if we need to cancel countdown
-    if (this.phaseManager.getCurrentPhase() === 'lobby' ||
-        this.phaseManager.getCurrentPhase() === 'countdown') {
+    if (
+      this.phaseManager.getCurrentPhase() === "lobby" ||
+      this.phaseManager.getCurrentPhase() === "countdown"
+    ) {
       if (!this.lobbyManager.areAllPlayersReady()) {
         this.phaseManager.cancelCountdown();
       }
@@ -63,18 +73,25 @@ export class GameStateManager {
     // If waiting for minigame ready signals, remove from ready set and recheck
     if (this.isWaitingForMinigameReady) {
       this.minigameReadyPlayers.delete(id);
-      console.log(`Player ${id} disconnected while waiting for ready. ${this.minigameReadyPlayers.size}/${this.players.size} ready.`);
+      console.log(
+        `Player ${id} disconnected while waiting for ready. ${this.minigameReadyPlayers.size}/${this.players.size} ready.`,
+      );
 
       // Check if remaining players are all ready
-      if (this.minigameReadyPlayers.size === this.players.size && this.players.size > 0) {
-        console.log('All remaining players ready! Broadcasting game:started...');
+      if (
+        this.minigameReadyPlayers.size === this.players.size &&
+        this.players.size > 0
+      ) {
+        console.log(
+          "All remaining players ready! Broadcasting game:started...",
+        );
         this.isWaitingForMinigameReady = false;
         this.minigameReadyPlayers.clear();
 
         // Broadcast game start event to all clients with player positions
-        this.io.emit('game:started', {
+        this.io.emit("game:started", {
           config: this.minigameConfig,
-          players: this.getAllPlayers()
+          players: this.getAllPlayers(),
         });
 
         this.startGameLoop();
@@ -113,37 +130,39 @@ export class GameStateManager {
   // Lobby management
   getAvailableMinigames(): MinigameInfo[] {
     const minigameIds = ConfigLoader.getAllMinigames();
-    const minigames = minigameIds.map(id => {
+    const minigames = minigameIds.map((id) => {
       const config = ConfigLoader.getConfig(id);
       return { id, name: config.name };
     });
 
-    minigames.push({ id: 'random', name: 'Random' });
+    minigames.push({ id: "random", name: "Random" });
 
     return minigames;
   }
 
   voteForMinigame(playerId: string, minigameId: string): void {
     this.lobbyManager.voteForMinigame(playerId, minigameId);
-    this.io.emit('lobby:vote-changed', { playerId, minigameId });
+    this.io.emit("lobby:vote-changed", { playerId, minigameId });
 
     const tally = this.lobbyManager.tallyVotes();
-    this.io.emit('lobby:vote-tally', tally);
+    this.io.emit("lobby:vote-tally", tally);
 
     console.log(`Player ${playerId} voted for ${minigameId}`);
-    console.log('Vote tally:', tally);
+    console.log("Vote tally:", tally);
   }
 
   togglePlayerReady(id: string): void {
     const isReady = this.lobbyManager.togglePlayerReady(id);
-    this.io.emit('lobby:player-ready-changed', { playerId: id, isReady });
+    this.io.emit("lobby:player-ready-changed", { playerId: id, isReady });
 
     console.log(`Player ${id} ready state: ${isReady}`);
-    console.log(`Ready count: ${this.lobbyManager.getReadyCount()}/${this.players.size}`);
+    console.log(
+      `Ready count: ${this.lobbyManager.getReadyCount()}/${this.players.size}`,
+    );
 
     if (this.lobbyManager.areAllPlayersReady() && this.players.size > 0) {
-      console.log('All players ready! Starting countdown...');
-      this.io.emit('lobby:all-ready');
+      console.log("All players ready! Starting countdown...");
+      this.io.emit("lobby:all-ready");
       this.startGame();
     }
   }
@@ -151,14 +170,17 @@ export class GameStateManager {
   // Game flow
   private startGame(): void {
     this.phaseManager.startCountdown(() => {
-      this.phaseManager.transitionTo('playing' as GamePhase);
+      this.phaseManager.transitionTo("playing" as GamePhase);
 
       const tally = this.lobbyManager.tallyVotes();
-      let selectedMinigame = tally.selectedMinigame || 'obstacleDodge';
+      let selectedMinigame = tally.selectedMinigame || "random";
 
-      if (selectedMinigame === 'random') {
+      if (selectedMinigame === "random") {
         const availableMinigames = ConfigLoader.getAllMinigames();
-        selectedMinigame = availableMinigames[Math.floor(Math.random() * availableMinigames.length)];
+        selectedMinigame =
+          availableMinigames[
+            Math.floor(Math.random() * availableMinigames.length)
+          ];
         console.log(`Random selected: ${selectedMinigame}`);
       }
 
@@ -174,9 +196,9 @@ export class GameStateManager {
 
       // Reset all players to alive and spawn them at starting position
       const spawnX = this.worldWidth - 100; // 100px from right edge
-      const spawnY = this.worldHeight / 2;   // Vertically centered
+      const spawnY = this.worldHeight / 2; // Vertically centered
 
-      this.players.forEach(player => {
+      this.players.forEach((player) => {
         player.isAlive = true;
         player.x = spawnX;
         player.y = spawnY;
@@ -194,7 +216,7 @@ export class GameStateManager {
           acceleration: this.minigameConfig.barAcceleration,
           padding: this.padding,
         },
-        this.minigameConfig.spawnInterval
+        this.minigameConfig.spawnInterval,
       );
 
       this.gameStartTime = Date.now();
@@ -205,33 +227,39 @@ export class GameStateManager {
       this.isWaitingForMinigameReady = true;
       this.minigameReadyPlayers.clear();
 
-      console.log(`Waiting for ${this.players.size} clients to send minigame:ready...`);
+      console.log(
+        `Waiting for ${this.players.size} clients to send minigame:ready...`,
+      );
 
       // DON'T start game loop yet - wait for all clients to signal ready!
     } catch (error) {
-      console.error('Failed to start minigame:', error);
+      console.error("Failed to start minigame:", error);
     }
   }
 
   onMinigameReady(playerId: string): void {
     if (!this.isWaitingForMinigameReady) {
-      console.warn(`Received minigame:ready from ${playerId} but not waiting for ready`);
+      console.warn(
+        `Received minigame:ready from ${playerId} but not waiting for ready`,
+      );
       return;
     }
 
     this.minigameReadyPlayers.add(playerId);
-    console.log(`Player ${playerId} ready (${this.minigameReadyPlayers.size}/${this.players.size})`);
+    console.log(
+      `Player ${playerId} ready (${this.minigameReadyPlayers.size}/${this.players.size})`,
+    );
 
     // Check if all players are ready
     if (this.minigameReadyPlayers.size === this.players.size) {
-      console.log('All players ready! Broadcasting game:started...');
+      console.log("All players ready! Broadcasting game:started...");
       this.isWaitingForMinigameReady = false;
       this.minigameReadyPlayers.clear();
 
       // Broadcast game start event to all clients with player positions
-      this.io.emit('game:started', {
+      this.io.emit("game:started", {
         config: this.minigameConfig,
-        players: this.getAllPlayers()
+        players: this.getAllPlayers(),
       });
 
       // NOW start the game loop
@@ -253,21 +281,23 @@ export class GameStateManager {
       // 1. Spawn new obstacles if needed
       const newObstacle = this.obstacleManager.updateSpawning(now);
       if (newObstacle) {
-        this.io.emit('minigame:obstacle-dodge:obstacle-spawn', newObstacle);
+        this.io.emit("minigame:obstacle-dodge:obstacle-spawn", newObstacle);
       }
 
       // 2. Update obstacle positions
       this.obstacleManager.updateObstacles(deltaTime);
 
       // 3. Check collisions for all alive players
-      const alivePlayers = Array.from(this.players.values()).filter(p => p.isAlive);
+      const alivePlayers = Array.from(this.players.values()).filter(
+        (p) => p.isAlive,
+      );
 
       for (const player of alivePlayers) {
         const collision = this.obstacleManager.checkCollision(
           player.id,
           player.x,
           player.y,
-          16 // Player radius
+          16, // Player radius
         );
 
         if (collision) {
@@ -278,21 +308,23 @@ export class GameStateManager {
       // 4. Remove expired obstacles and broadcast updates
       const removedIds = this.obstacleManager.removeExpiredObstacles();
       for (const id of removedIds) {
-        this.io.emit('minigame:obstacle-dodge:obstacle-remove', id);
+        this.io.emit("minigame:obstacle-dodge:obstacle-remove", id);
       }
 
       // 5. Broadcast obstacle updates to clients (every frame)
       const allObstacles = this.obstacleManager.getAllObstacles();
       Object.entries(allObstacles).forEach(([id, obstacle]) => {
-        this.io.emit('minigame:obstacle-dodge:obstacle-update', {
+        this.io.emit("minigame:obstacle-dodge:obstacle-update", {
           id: obstacle.id,
           x: obstacle.x,
-          speed: obstacle.speed
+          speed: obstacle.speed,
         });
       });
 
       // 6. Check win condition: only 1 or 0 players alive
-      const aliveCount = Array.from(this.players.values()).filter(p => p.isAlive).length;
+      const aliveCount = Array.from(this.players.values()).filter(
+        (p) => p.isAlive,
+      ).length;
       if (aliveCount <= 1) {
         this.endMinigame();
       }
@@ -307,12 +339,14 @@ export class GameStateManager {
       this.deathOrder.push(playerId);
 
       // Broadcast death event to all clients
-      this.io.emit('minigame:obstacle-dodge:player-death', {
+      this.io.emit("minigame:obstacle-dodge:player-death", {
         playerId,
-        timestamp
+        timestamp,
       });
 
-      console.log(`Player ${playerId} died at ${new Date(timestamp).toISOString()}`);
+      console.log(
+        `Player ${playerId} died at ${new Date(timestamp).toISOString()}`,
+      );
     }
   }
 
@@ -322,7 +356,7 @@ export class GameStateManager {
       this.gameLoopInterval = null;
     }
 
-    this.phaseManager.transitionTo('results' as GamePhase);
+    this.phaseManager.transitionTo("results" as GamePhase);
 
     // Award points based on death order
     this.awardPoints();
@@ -331,9 +365,9 @@ export class GameStateManager {
     const results = this.calculateResults();
 
     // Broadcast results
-    this.io.emit('game:ended', results);
+    this.io.emit("game:ended", results);
 
-    console.log('Minigame ended. Results:', results);
+    console.log("Minigame ended. Results:", results);
 
     // Players will manually return to lobby via the button
   }
@@ -347,24 +381,32 @@ export class GameStateManager {
       if (player) {
         const points = index + 1; // 1-indexed
         player.points += points;
-        console.log(`Player ${playerId} awarded ${points} points (total: ${player.points})`);
+        console.log(
+          `Player ${playerId} awarded ${points} points (total: ${player.points})`,
+        );
       }
     });
 
     // Award winner (last alive or highest survival time) the maximum points
-    const alivePlayer = Array.from(this.players.values()).find(p => p.isAlive);
+    const alivePlayer = Array.from(this.players.values()).find(
+      (p) => p.isAlive,
+    );
     if (alivePlayer) {
       alivePlayer.points += totalPlayers;
-      console.log(`Winner ${alivePlayer.id} awarded ${totalPlayers} points (total: ${alivePlayer.points})`);
+      console.log(
+        `Winner ${alivePlayer.id} awarded ${totalPlayers} points (total: ${alivePlayer.points})`,
+      );
     }
   }
 
   private calculateResults(): GameResults {
-    const alivePlayer = Array.from(this.players.values()).find(p => p.isAlive);
+    const alivePlayer = Array.from(this.players.values()).find(
+      (p) => p.isAlive,
+    );
     const totalPlayers = this.players.size;
 
     const rankings = Array.from(this.players.values())
-      .map(player => {
+      .map((player) => {
         const deathTime = this.deathTimes.get(player.id);
         const survivalTime = deathTime
           ? deathTime - this.gameStartTime
@@ -386,27 +428,31 @@ export class GameStateManager {
           playerName: player.name,
           survivalTime,
           pointsAwarded,
-          totalPoints: player.points
+          totalPoints: player.points,
         };
       })
       .sort((a, b) => b.survivalTime - a.survivalTime); // Sort by survival time descending
 
     return {
       winner: alivePlayer?.id ?? null,
-      rankings
+      rankings,
     };
   }
 
   returnToLobby(): void {
     this.lobbyManager.resetReady();
     this.lobbyManager.resetVotes();
-    this.phaseManager.transitionTo('lobby' as GamePhase);
+    this.phaseManager.transitionTo("lobby" as GamePhase);
 
     // Broadcast current player state to all clients
     const allPlayers = this.getAllPlayers();
-    this.io.emit('lobby:state-sync', allPlayers);
+    this.io.emit("lobby:state-sync", allPlayers);
 
-    console.log('Returned to lobby');
+    // Broadcast cleared vote tally
+    const tally = this.lobbyManager.tallyVotes();
+    this.io.emit("lobby:vote-tally", tally);
+
+    console.log("Returned to lobby");
   }
 
   // Helper methods

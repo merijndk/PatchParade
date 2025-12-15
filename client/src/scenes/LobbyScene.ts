@@ -5,6 +5,7 @@ import type { PlayerState } from '../types';
 export class LobbyScene extends Phaser.Scene {
   private socketManager!: SocketManager;
   private playerListText!: Phaser.GameObjects.Text;
+  private playerTextObjects: Phaser.GameObjects.Text[] = [];
   private readyButton!: Phaser.GameObjects.Text;
   private statusText!: Phaser.GameObjects.Text;
   private players: Map<string, PlayerState> = new Map();
@@ -194,15 +195,29 @@ export class LobbyScene extends Phaser.Scene {
   }
 
   updatePlayerList(): void {
-    let text = `Players (${this.players.size}):\n\n`;
+    // Clear existing player text objects
+    this.playerTextObjects.forEach(textObj => textObj.destroy());
+    this.playerTextObjects = [];
 
+    // Update header
+    this.playerListText.setText(`Players (${this.players.size}):`);
+
+    // Create individual text objects for each player
+    let yOffset = 260;
     this.players.forEach(player => {
       const readyStatus = player.isReady ? '[READY]' : '[NOT READY]';
       const youMarker = player.id === this.localPlayerId ? ' (You)' : '';
-      text += `${player.name}${youMarker} ${readyStatus}\n`;
-    });
+      const color = player.isReady ? '#00ff00' : '#ff0000';
 
-    this.playerListText.setText(text);
+      const playerText = this.add.text(400, yOffset, `${player.name}${youMarker} ${readyStatus}`, {
+        fontSize: '20px',
+        color: color,
+        align: 'center'
+      }).setOrigin(0.5);
+
+      this.playerTextObjects.push(playerText);
+      yOffset += 30;
+    });
   }
 
   updateReadyButton(): void {
@@ -219,6 +234,8 @@ export class LobbyScene extends Phaser.Scene {
     if (this.nameInput && this.nameInput.parentElement) {
       document.body.removeChild(this.nameInput);
     }
+    this.playerTextObjects.forEach(textObj => textObj.destroy());
+    this.playerTextObjects = [];
     this.socketManager.removeAllListeners();
   }
 }

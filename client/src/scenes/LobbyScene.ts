@@ -6,6 +6,7 @@ export class LobbyScene extends Phaser.Scene {
   private socketManager!: SocketManager;
   private playerListText!: Phaser.GameObjects.Text;
   private playerTextObjects: Phaser.GameObjects.Text[] = [];
+  private playerColorBalls: Phaser.GameObjects.Graphics[] = [];
   private readyButton!: Phaser.GameObjects.Text;
   private statusText!: Phaser.GameObjects.Text;
   private players: Map<string, PlayerState> = new Map();
@@ -229,9 +230,11 @@ export class LobbyScene extends Phaser.Scene {
   }
 
   updatePlayerList(): void {
-    // Clear existing player text objects
+    // Clear existing player text and color ball objects
     this.playerTextObjects.forEach(textObj => textObj.destroy());
     this.playerTextObjects = [];
+    this.playerColorBalls.forEach(ball => ball.destroy());
+    this.playerColorBalls = [];
 
     // Update header
     this.playerListText.setText(`Players (${this.players.size}):`);
@@ -239,20 +242,46 @@ export class LobbyScene extends Phaser.Scene {
     // Sort players by points (descending)
     const sortedPlayers = Array.from(this.players.values()).sort((a, b) => b.points - a.points);
 
-    // Create individual text objects for each player
+    // Table column positions
+    const ballX = 200;
+    const nameX = 230;
+    const pointsX = 500;
+    const youMarkerX = 580;
+
+    // Create table rows for each player
     let yOffset = 280;
     sortedPlayers.forEach(player => {
-      const color = player.isReady ? '#00ff00' : '#ffffff';
-      const pointsDisplay = ` - ${player.points} pts`;
-      const youMarker = player.id === this.localPlayerId ? ' (You)' : '';
+      const textColor = player.isReady ? '#00ff00' : '#ffffff';
 
-      const playerText = this.add.text(400, yOffset, `${player.name}${youMarker}${pointsDisplay}`, {
+      // Column 1: Colored ball
+      const ballGraphics = this.add.graphics();
+      ballGraphics.fillStyle(player.color, 1);
+      ballGraphics.fillCircle(ballX, yOffset, 10);
+      this.playerColorBalls.push(ballGraphics);
+
+      // Column 2: Player name (left-aligned)
+      const nameText = this.add.text(nameX, yOffset, player.name, {
         fontSize: '20px',
-        color: color,
-        align: 'center'
-      }).setOrigin(0.5);
+        color: textColor
+      }).setOrigin(0, 0.5);
+      this.playerTextObjects.push(nameText);
 
-      this.playerTextObjects.push(playerText);
+      // Column 3: Points (left-aligned)
+      const pointsText = this.add.text(pointsX, yOffset, `${player.points} pts`, {
+        fontSize: '20px',
+        color: textColor
+      }).setOrigin(0, 0.5);
+      this.playerTextObjects.push(pointsText);
+
+      // Column 4: "You" indicator (if local player)
+      if (player.id === this.localPlayerId) {
+        const youIndicator = this.add.text(youMarkerX, yOffset, '←', {
+          fontSize: '24px',
+          color: '#ffff00'
+        }).setOrigin(0, 0.5);
+        this.playerTextObjects.push(youIndicator);
+      }
+
       yOffset += 30;
     });
   }
@@ -270,6 +299,8 @@ export class LobbyScene extends Phaser.Scene {
   shutdown(): void {
     this.playerTextObjects.forEach(textObj => textObj.destroy());
     this.playerTextObjects = [];
+    this.playerColorBalls.forEach(ball => ball.destroy());
+    this.playerColorBalls = [];
     this.socketManager.removeAllListeners();
   }
 }

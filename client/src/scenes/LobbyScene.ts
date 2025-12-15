@@ -12,11 +12,8 @@ export class LobbyScene extends Phaser.Scene {
   private players: Map<string, PlayerState> = new Map();
   private localPlayerId: string = '';
   private isLocalPlayerReady: boolean = false;
-  private nameInputBox!: Phaser.GameObjects.Rectangle;
-  private nameInputText!: Phaser.GameObjects.Text;
   private nameInputActive: boolean = false;
   private currentNameInput: string = '';
-  private changeNameButton!: Phaser.GameObjects.Text;
   private availableMinigames: MinigameInfo[] = [];
   private voteTally: Record<string, number> = {};
   private selectedMinigame: string | null = null;
@@ -41,34 +38,6 @@ export class LobbyScene extends Phaser.Scene {
       color: '#ffffff'
     }).setOrigin(0.5);
 
-    // Name change UI
-    this.add.text(400, 100, 'Change Name:', {
-      fontSize: '18px',
-      color: '#ffffff'
-    }).setOrigin(0.5);
-
-    this.nameInputBox = this.add.rectangle(320, 145, 200, 40, 0x333333)
-      .setStrokeStyle(2, 0x666666)
-      .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.activateNameInput());
-
-    this.nameInputText = this.add.text(320, 145, 'Click to type...', {
-      fontSize: '16px',
-      color: '#888888'
-    }).setOrigin(0.5);
-
-    this.changeNameButton = this.add.text(480, 145, 'Change', {
-      fontSize: '18px',
-      color: '#ffffff',
-      backgroundColor: '#0066cc',
-      padding: { left: 15, right: 15, top: 8, bottom: 8 }
-    })
-    .setOrigin(0.5)
-    .setInteractive({ useHandCursor: true })
-    .on('pointerdown', () => this.changeName())
-    .on('pointerover', () => this.changeNameButton.setStyle({ backgroundColor: '#0088ff' }))
-    .on('pointerout', () => this.changeNameButton.setStyle({ backgroundColor: '#0066cc' }));
-
     this.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
       if (!this.nameInputActive) return;
 
@@ -76,17 +45,17 @@ export class LobbyScene extends Phaser.Scene {
         this.changeName();
       } else if (event.key === 'Backspace') {
         this.currentNameInput = this.currentNameInput.slice(0, -1);
-        this.updateNameInputDisplay();
+        this.updatePlayerList();
       } else if (event.key === 'Escape') {
         this.deactivateNameInput();
       } else if (event.key.length === 1 && this.currentNameInput.length < 20) {
         this.currentNameInput += event.key;
-        this.updateNameInputDisplay();
+        this.updatePlayerList();
       }
     });
 
     // Player list
-    this.playerListText = this.add.text(400, 240, '', {
+    this.playerListText = this.add.text(400, 220, '', {
       fontSize: '20px',
       color: '#ffffff',
       align: 'center'
@@ -114,8 +83,8 @@ export class LobbyScene extends Phaser.Scene {
       color: '#aaaaaa'
     }).setOrigin(0.5);
 
-    // Game selection title (will be positioned after we know how many games there are)
-    this.add.text(400, 190, 'Vote for a Minigame:', {
+    // Game selection title
+    this.add.text(400, 100, 'Vote for a Minigame:', {
       fontSize: '18px',
       color: '#ffffff'
     }).setOrigin(0.5);
@@ -224,35 +193,23 @@ export class LobbyScene extends Phaser.Scene {
 
   activateNameInput(): void {
     this.nameInputActive = true;
-    this.nameInputBox.setStrokeStyle(2, 0x0088ff);
-    this.currentNameInput = '';
-    this.updateNameInputDisplay();
+    const localPlayer = this.players.get(this.localPlayerId);
+    this.currentNameInput = localPlayer?.name || '';
+    this.updatePlayerList();
   }
 
   deactivateNameInput(): void {
     this.nameInputActive = false;
-    this.nameInputBox.setStrokeStyle(2, 0x666666);
     this.currentNameInput = '';
-    this.nameInputText.setText('Click to type...');
-    this.nameInputText.setStyle({ color: '#888888' });
-  }
-
-  updateNameInputDisplay(): void {
-    if (this.currentNameInput.length === 0) {
-      this.nameInputText.setText('Click to type...');
-      this.nameInputText.setStyle({ color: '#888888' });
-    } else {
-      this.nameInputText.setText(this.currentNameInput);
-      this.nameInputText.setStyle({ color: '#ffffff' });
-    }
+    this.updatePlayerList();
   }
 
   changeName(): void {
     const newName = this.currentNameInput.trim();
     if (newName.length > 0) {
       this.socketManager.sendChangeName(newName);
-      this.deactivateNameInput();
     }
+    this.deactivateNameInput();
   }
 
   toggleReady(): void {
@@ -280,9 +237,10 @@ export class LobbyScene extends Phaser.Scene {
     const youMarkerX = 580;
 
     // Create table rows for each player
-    let yOffset = 280;
+    let yOffset = 250;
     sortedPlayers.forEach(player => {
       const textColor = player.isReady ? '#00ff00' : '#ffffff';
+      const isLocalPlayer = player.id === this.localPlayerId;
 
       // Column 1: Colored ball
       const ballGraphics = this.add.graphics();
@@ -291,10 +249,35 @@ export class LobbyScene extends Phaser.Scene {
       this.playerColorBalls.push(ballGraphics);
 
       // Column 2: Player name (left-aligned)
-      const nameText = this.add.text(nameX, yOffset, player.name, {
+      let displayName = player.name;
+      if (isLocalPlayer && this.nameInputActive) {
+        displayName = this.currentNameInput + '_';
+      }
+
+      const nameText = this.add.text(nameX, yOffset, displayName, {
         fontSize: '20px',
         color: textColor
       }).setOrigin(0, 0.5);
+
+      if (isLocalPlayer) {
+        nameText.setInteractive({ useHandCursor: true });
+        nameText.on('pointerdown', () => {
+          if (!this.nameInputActive) {
+            this.activateNameInput();
+          }
+        });
+        nameText.on('pointerover', () => {
+          if (!this.nameInputActive) {
+            nameText.setStyle({ color: '#00ccff' });
+          }
+        });
+        nameText.on('pointerout', () => {
+          if (!this.nameInputActive) {
+            nameText.setStyle({ color: textColor });
+          }
+        });
+      }
+
       this.playerTextObjects.push(nameText);
 
       // Column 3: Points (left-aligned)
@@ -305,7 +288,7 @@ export class LobbyScene extends Phaser.Scene {
       this.playerTextObjects.push(pointsText);
 
       // Column 4: "You" indicator (if local player)
-      if (player.id === this.localPlayerId) {
+      if (isLocalPlayer) {
         const youIndicator = this.add.text(youMarkerX, yOffset, '←', {
           fontSize: '24px',
           color: '#ffff00'
@@ -334,7 +317,7 @@ export class LobbyScene extends Phaser.Scene {
     this.voteCountTexts = [];
 
     const startX = 400 - (this.availableMinigames.length * 120) / 2;
-    const startY = 215;
+    const startY = 145;
 
     this.availableMinigames.forEach((minigame, index) => {
       const x = startX + index * 120;

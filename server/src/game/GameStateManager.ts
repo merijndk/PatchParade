@@ -65,9 +65,16 @@ export class GameStateManager {
 
       // Check if remaining players are all ready
       if (this.minigameReadyPlayers.size === this.players.size && this.players.size > 0) {
-        console.log('All remaining players ready! Starting game loop...');
+        console.log('All remaining players ready! Broadcasting game:started...');
         this.isWaitingForMinigameReady = false;
         this.minigameReadyPlayers.clear();
+
+        // Broadcast game start event to all clients with player positions
+        this.io.emit('game:started', {
+          config: this.minigameConfig,
+          players: this.getAllPlayers()
+        });
+
         this.startGameLoop();
       }
     }
@@ -155,12 +162,6 @@ export class GameStateManager {
       this.isWaitingForMinigameReady = true;
       this.minigameReadyPlayers.clear();
 
-      // Broadcast game start event to all clients with player positions
-      this.io.emit('game:started', {
-        config: this.minigameConfig,
-        players: this.getAllPlayers()
-      });
-
       console.log(`Waiting for ${this.players.size} clients to send minigame:ready...`);
 
       // DON'T start game loop yet - wait for all clients to signal ready!
@@ -180,9 +181,15 @@ export class GameStateManager {
 
     // Check if all players are ready
     if (this.minigameReadyPlayers.size === this.players.size) {
-      console.log('All players ready! Starting game loop...');
+      console.log('All players ready! Broadcasting game:started...');
       this.isWaitingForMinigameReady = false;
       this.minigameReadyPlayers.clear();
+
+      // Broadcast game start event to all clients with player positions
+      this.io.emit('game:started', {
+        config: this.minigameConfig,
+        players: this.getAllPlayers()
+      });
 
       // NOW start the game loop
       this.startGameLoop();

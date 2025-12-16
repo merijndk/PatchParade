@@ -66,6 +66,22 @@ io.on('connection', (socket) => {
     gameState.onMinigameReady(socket.id);
   });
 
+  // Bumper Balls specific events
+  socket.on('minigame:bumper-balls:dash', () => {
+    const result = gameState.activateDash(socket.id);
+    if (result.success) {
+      io.emit('minigame:bumper-balls:dash-activated', {
+        playerId: socket.id,
+        dirX: result.dirX!,
+        dirY: result.dirY!
+      });
+    }
+  });
+
+  socket.on('minigame:bumper-balls:input', (data) => {
+    gameState.updateBumperBallsInput(socket.id, data.dirX, data.dirY);
+  });
+
   socket.on('disconnect', () => {
     console.log(`Player disconnected: ${socket.id}`);
     gameState.removePlayer(socket.id);

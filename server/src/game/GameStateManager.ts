@@ -11,6 +11,7 @@ import type {
 import { LobbyManager } from "./LobbyManager.js";
 import { GamePhaseManager } from "./GamePhaseManager.js";
 import { ObstacleManager } from "./ObstacleManager.js";
+import { BumperBallsManager } from "./BumperBallsManager.js";
 import { ConfigLoader } from "../config/ConfigLoader.js";
 
 export class GameStateManager {
@@ -24,6 +25,7 @@ export class GameStateManager {
 
   // Minigame state
   private obstacleManager: ObstacleManager | null = null;
+  private bumperBallsManager: BumperBallsManager | null = null;
   private gameLoopInterval: NodeJS.Timeout | null = null;
   private gameStartTime: number = 0;
   private deathTimes: Map<string, number> = new Map();
@@ -194,30 +196,71 @@ export class GameStateManager {
       // Load minigame configuration
       this.minigameConfig = ConfigLoader.getConfig(minigameName);
 
-      // Reset all players to alive and spawn them at starting position
-      const spawnX = this.worldWidth - 100; // 100px from right edge
-      const spawnY = this.worldHeight / 2; // Vertically centered
-
+      // Reset all players to alive
       this.players.forEach((player) => {
         player.isAlive = true;
-        player.x = spawnX;
-        player.y = spawnY;
       });
 
-      // Initialize obstacle manager
-      this.obstacleManager = new ObstacleManager(
-        {
+      // Initialize minigame-specific manager
+      if (minigameName === "bumperBalls") {
+        // Spawn players at random positions for Bumper Balls
+        const centerX = this.worldWidth / 2;
+        const centerY = this.worldHeight / 2;
+
+        this.players.forEach((player) => {
+          // Spawn players at random positions within the arena
+          // Use polar coordinates to ensure spawn within circle
+          const spawnRadius = this.minigameConfig.arenaRadius! * 0.7; // 70% of arena radius
+          const randomAngle = Math.random() * Math.PI * 2;
+          const randomDistance = Math.random() * spawnRadius;
+
+          player.x = centerX + Math.cos(randomAngle) * randomDistance;
+          player.y = centerY + Math.sin(randomAngle) * randomDistance;
+        });
+
+        // Initialize Bumper Balls manager
+        this.bumperBallsManager = new BumperBallsManager({
           worldWidth: this.worldWidth,
           worldHeight: this.worldHeight,
-          barWidth: this.minigameConfig.barWidth,
-          barHeight: this.minigameConfig.barHeight,
-          gapSize: this.minigameConfig.gapSize,
-          initialSpeed: this.minigameConfig.initialBarSpeed,
-          acceleration: this.minigameConfig.barAcceleration,
-          padding: this.padding,
-        },
-        this.minigameConfig.spawnInterval,
-      );
+          arenaRadius: this.minigameConfig.arenaRadius!,
+          playerRadius: 16,
+          moveAcceleration: this.minigameConfig.moveAcceleration!,
+          friction: this.minigameConfig.friction!,
+          maxSpeed: this.minigameConfig.maxSpeed!,
+          dashSpeed: this.minigameConfig.dashSpeed!,
+          dashCooldown: this.minigameConfig.dashCooldown!,
+          dashDuration: this.minigameConfig.dashDuration!,
+        });
+
+        // Initialize physics for all players
+        this.players.forEach((player) => {
+          this.bumperBallsManager!.initializePlayer(player.id);
+        });
+      } else if (minigameName === "obstacleDodge") {
+        // Spawn players at right edge for Obstacle Dodge
+        const spawnX = this.worldWidth - 100;
+        const spawnY = this.worldHeight / 2;
+
+        this.players.forEach((player) => {
+          player.x = spawnX;
+          player.y = spawnY;
+        });
+
+        // Initialize obstacle manager
+        this.obstacleManager = new ObstacleManager(
+          {
+            worldWidth: this.worldWidth,
+            worldHeight: this.worldHeight,
+            barWidth: this.minigameConfig.barWidth!,
+            barHeight: this.minigameConfig.barHeight!,
+            gapSize: this.minigameConfig.gapSize!,
+            initialSpeed: this.minigameConfig.initialBarSpeed!,
+            acceleration: this.minigameConfig.barAcceleration!,
+            padding: this.padding,
+          },
+          this.minigameConfig.spawnInterval!,
+        );
+      }
 
       this.gameStartTime = Date.now();
       this.deathTimes.clear();
@@ -276,57 +319,97 @@ export class GameStateManager {
       const deltaTime = (now - lastTime) / 1000; // Convert to seconds
       lastTime = now;
 
-      if (!this.obstacleManager) return;
-
-      // 1. Spawn new obstacles if needed
-      const newObstacle = this.obstacleManager.updateSpawning(now);
-      if (newObstacle) {
-        this.io.emit("minigame:obstacle-dodge:obstacle-spawn", newObstacle);
-      }
-
-      // 2. Update obstacle positions
-      this.obstacleManager.updateObstacles(deltaTime);
-
-      // 3. Check collisions for all alive players
-      const alivePlayers = Array.from(this.players.values()).filter(
-        (p) => p.isAlive,
-      );
-
-      for (const player of alivePlayers) {
-        const collision = this.obstacleManager.checkCollision(
-          player.id,
-          player.x,
-          player.y,
-          16, // Player radius
+      if (this.bumperBallsManager) {
+        // Bumper Balls game loop
+        const result = this.bumperBallsManager.updatePhysics(
+          this.players,
+          deltaTime,
         );
 
-        if (collision) {
-          this.handlePlayerDeath(player.id, now);
-        }
-      }
-
-      // 4. Remove expired obstacles and broadcast updates
-      const removedIds = this.obstacleManager.removeExpiredObstacles();
-      for (const id of removedIds) {
-        this.io.emit("minigame:obstacle-dodge:obstacle-remove", id);
-      }
-
-      // 5. Broadcast obstacle updates to clients (every frame)
-      const allObstacles = this.obstacleManager.getAllObstacles();
-      Object.entries(allObstacles).forEach(([id, obstacle]) => {
-        this.io.emit("minigame:obstacle-dodge:obstacle-update", {
-          id: obstacle.id,
-          x: obstacle.x,
-          speed: obstacle.speed,
+        // Handle eliminations
+        result.eliminatedPlayers.forEach((playerId) => {
+          this.handlePlayerDeath(playerId, now);
+          this.io.emit("minigame:bumper-balls:player-eliminated", {
+            playerId,
+          });
         });
-      });
 
-      // 6. Check win condition: only 1 or 0 players alive
-      const aliveCount = Array.from(this.players.values()).filter(
-        (p) => p.isAlive,
-      ).length;
-      if (aliveCount <= 1) {
-        this.endMinigame();
+        // Broadcast physics state to all clients
+        const physicsUpdate: Record<string, any> = {};
+        this.players.forEach((player, playerId) => {
+          const physics = result.physicsState.get(playerId);
+          if (physics) {
+            physicsUpdate[playerId] = {
+              x: player.x,
+              y: player.y,
+              velocityX: physics.velocityX,
+              velocityY: physics.velocityY,
+              dashCooldown: physics.dashCooldownRemaining,
+            };
+          }
+        });
+
+        this.io.emit("minigame:bumper-balls:physics-update", physicsUpdate);
+
+        // Check win condition
+        const aliveCount = Array.from(this.players.values()).filter(
+          (p) => p.isAlive,
+        ).length;
+        if (aliveCount <= 1) {
+          this.endMinigame();
+        }
+      } else if (this.obstacleManager) {
+        // Obstacle Dodge game loop
+        // 1. Spawn new obstacles if needed
+        const newObstacle = this.obstacleManager.updateSpawning(now);
+        if (newObstacle) {
+          this.io.emit("minigame:obstacle-dodge:obstacle-spawn", newObstacle);
+        }
+
+        // 2. Update obstacle positions
+        this.obstacleManager.updateObstacles(deltaTime);
+
+        // 3. Check collisions for all alive players
+        const alivePlayers = Array.from(this.players.values()).filter(
+          (p) => p.isAlive,
+        );
+
+        for (const player of alivePlayers) {
+          const collision = this.obstacleManager.checkCollision(
+            player.id,
+            player.x,
+            player.y,
+            16, // Player radius
+          );
+
+          if (collision) {
+            this.handlePlayerDeath(player.id, now);
+          }
+        }
+
+        // 4. Remove expired obstacles and broadcast updates
+        const removedIds = this.obstacleManager.removeExpiredObstacles();
+        for (const id of removedIds) {
+          this.io.emit("minigame:obstacle-dodge:obstacle-remove", id);
+        }
+
+        // 5. Broadcast obstacle updates to clients (every frame)
+        const allObstacles = this.obstacleManager.getAllObstacles();
+        Object.entries(allObstacles).forEach(([id, obstacle]) => {
+          this.io.emit("minigame:obstacle-dodge:obstacle-update", {
+            id: obstacle.id,
+            x: obstacle.x,
+            speed: obstacle.speed,
+          });
+        });
+
+        // 6. Check win condition: only 1 or 0 players alive
+        const aliveCount = Array.from(this.players.values()).filter(
+          (p) => p.isAlive,
+        ).length;
+        if (aliveCount <= 1) {
+          this.endMinigame();
+        }
       }
     }, FRAME_DURATION);
   }
@@ -453,6 +536,20 @@ export class GameStateManager {
     this.io.emit("lobby:vote-tally", tally);
 
     console.log("Returned to lobby");
+  }
+
+  // Bumper Balls specific methods
+  activateDash(playerId: string): { success: boolean; dirX?: number; dirY?: number } {
+    if (this.bumperBallsManager) {
+      return this.bumperBallsManager.activateDash(playerId);
+    }
+    return { success: false };
+  }
+
+  updateBumperBallsInput(playerId: string, dirX: number, dirY: number): void {
+    if (this.bumperBallsManager) {
+      this.bumperBallsManager.updatePlayerInput(playerId, dirX, dirY);
+    }
   }
 
   // Helper methods

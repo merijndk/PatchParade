@@ -29,12 +29,29 @@ export interface ObstacleState {
 
 export interface MinigameConfig {
   name: string;
-  initialBarSpeed: number;
-  barAcceleration: number;
-  spawnInterval: number;
-  gapSize: number;
-  barWidth: number;
-  barHeight: number;
+  // Obstacle Dodge
+  initialBarSpeed?: number;
+  barAcceleration?: number;
+  spawnInterval?: number;
+  gapSize?: number;
+  barWidth?: number;
+  barHeight?: number;
+  // Bumper Balls
+  arenaRadius?: number;
+  moveAcceleration?: number;
+  friction?: number;
+  maxSpeed?: number;
+  dashSpeed?: number;
+  dashCooldown?: number;
+  dashDuration?: number;
+}
+
+export interface PhysicsStateUpdate {
+  x: number;
+  y: number;
+  velocityX: number;
+  velocityY: number;
+  dashCooldown: number;
 }
 
 export interface MinigameInfo {
@@ -72,6 +89,9 @@ export interface ServerToClientEvents {
   'minigame:obstacle-dodge:obstacle-update': (data: { id: string; x: number; speed: number }) => void;
   'minigame:obstacle-dodge:obstacle-remove': (obstacleId: string) => void;
   'minigame:obstacle-dodge:player-death': (data: { playerId: string; timestamp: number }) => void;
+  'minigame:bumper-balls:physics-update': (data: Record<string, PhysicsStateUpdate>) => void;
+  'minigame:bumper-balls:dash-activated': (data: { playerId: string; dirX: number; dirY: number }) => void;
+  'minigame:bumper-balls:player-eliminated': (data: { playerId: string }) => void;
 }
 
 export interface ClientToServerEvents {
@@ -82,4 +102,6 @@ export interface ClientToServerEvents {
   'lobby:request-state': () => void;
   'results:return-to-lobby': () => void;
   'minigame:ready': () => void;
+  'minigame:bumper-balls:dash': () => void;
+  'minigame:bumper-balls:input': (data: { dirX: number; dirY: number }) => void;
 }

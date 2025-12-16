@@ -57,6 +57,15 @@ export class SocketManager {
     this.socket.emit('lobby:vote-minigame', minigameId);
   }
 
+  // Bumper Balls events
+  sendDash(): void {
+    this.socket.emit('minigame:bumper-balls:dash');
+  }
+
+  sendBumperBallsInput(dirX: number, dirY: number): void {
+    this.socket.emit('minigame:bumper-balls:input', { dirX, dirY });
+  }
+
   // Player events
   onWelcome(callback: (data: { playerId: string; players: Record<string, PlayerState>; availableMinigames: import('../types').MinigameInfo[] }) => void): void {
     this.socket.on('player:welcome', callback);
@@ -134,6 +143,19 @@ export class SocketManager {
     this.socket.on('minigame:obstacle-dodge:player-death', callback);
   }
 
+  // Bumper Balls events
+  onBumperBallsPhysicsUpdate(callback: (data: Record<string, import('../types').PhysicsStateUpdate>) => void): void {
+    this.socket.on('minigame:bumper-balls:physics-update', callback);
+  }
+
+  onBumperBallsDashActivated(callback: (data: { playerId: string }) => void): void {
+    this.socket.on('minigame:bumper-balls:dash-activated', callback);
+  }
+
+  onBumperBallsPlayerEliminated(callback: (data: { playerId: string }) => void): void {
+    this.socket.on('minigame:bumper-balls:player-eliminated', callback);
+  }
+
   // Clean up all event listeners (but keep socket connection alive)
   removeAllListeners(): void {
     this.socket.off('player:welcome');
@@ -154,6 +176,9 @@ export class SocketManager {
     this.socket.off('minigame:obstacle-dodge:obstacle-update');
     this.socket.off('minigame:obstacle-dodge:obstacle-remove');
     this.socket.off('minigame:obstacle-dodge:player-death');
+    this.socket.off('minigame:bumper-balls:physics-update');
+    this.socket.off('minigame:bumper-balls:dash-activated');
+    this.socket.off('minigame:bumper-balls:player-eliminated');
   }
 
   disconnect(): void {

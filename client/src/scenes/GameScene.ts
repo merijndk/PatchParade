@@ -13,6 +13,7 @@ export class GameScene extends Phaser.Scene {
     S: Phaser.Input.Keyboard.Key;
     D: Phaser.Input.Keyboard.Key;
   };
+  private shiftKey!: Phaser.Input.Keyboard.Key;
   private localPlayerId: string = '';
   private playerSpeed: number = 200;
   private localPlayerX: number = 0;
@@ -24,6 +25,11 @@ export class GameScene extends Phaser.Scene {
   private deadPlayers: Set<string> = new Set();
   private gameStartTime: number = 0;
   private minigameConfig: MinigameConfig | null = null;
+
+  // Bumper Balls state
+  private dashCooldown: number = 0;
+  private arenaGraphics: Phaser.GameObjects.Graphics | null = null;
+  private dashCooldownIndicator: Phaser.GameObjects.Graphics | null = null;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -43,6 +49,15 @@ export class GameScene extends Phaser.Scene {
       S: Phaser.Input.Keyboard.Key;
       D: Phaser.Input.Keyboard.Key;
     };
+    this.shiftKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
+
+    // Listen for Shift key press for dash
+    this.shiftKey.on('down', () => {
+      if (this.dashCooldown <= 0 && !this.deadPlayers.has(this.localPlayerId)) {
+        this.socketManager.sendDash();
+        this.dashCooldown = 1500; // Optimistic cooldown
+      }
+    });
 
     this.socketManager.onWelcome((data) => {
       this.localPlayerId = data.playerId;
@@ -102,6 +117,13 @@ export class GameScene extends Phaser.Scene {
       this.gameStartTime = Date.now();
       this.deadPlayers.clear();
       this.obstacles.clear();
+
+      // Create arena for Bumper Balls
+      if (data.config.name === 'Bumper Balls') {
+        this.createArena();
+        this.dashCooldownIndicator = this.add.graphics();
+        this.dashCooldownIndicator.setDepth(10);
+      }
 
       // Initialize players from game start data
       Object.entries(data.players).forEach(([id, player]) => {
@@ -199,6 +221,88 @@ export class GameScene extends Phaser.Scene {
       }
     });
 
+    // Bumper Balls physics update
+    this.socketManager.onBumperBallsPhysicsUpdate((data) => {
+      Object.entries(data).forEach(([playerId, state]) => {
+        if (playerId === this.localPlayerId) {
+          // Update local player position
+          this.localPlayerX = state.x;
+          this.localPlayerY = state.y;
+          if (this.localPlayer) {
+            this.localPlayer.setPosition(state.x, state.y);
+          }
+          // Update dash cooldown from server
+          this.dashCooldown = state.dashCooldown;
+        } else {
+          // Update remote player
+          const remotePlayer = this.remotePlayers.get(playerId);
+          if (remotePlayer) {
+            remotePlayer.setPosition(state.x, state.y);
+          }
+        }
+      });
+    });
+
+    // Bumper Balls dash activation (visual effects)
+    this.socketManager.onBumperBallsDashActivated((data) => {
+      const player = data.playerId === this.localPlayerId
+        ? this.localPlayer
+        : this.remotePlayers.get(data.playerId);
+
+      if (player) {
+        // Flash effect
+        this.tweens.add({
+          targets: player,
+          scaleX: 1.3,
+          scaleY: 1.3,
+          duration: 100,
+          yoyo: true,
+          ease: 'Power2'
+        });
+
+        // Trail effect - appears behind the player (opposite of dash direction)
+        const trail = this.add.graphics();
+        trail.fillStyle(0xffffff, 0.5);
+
+        // Calculate trail position (opposite direction of dash)
+        const trailDistance = 30; // Distance behind player
+        const trailX = player.x - data.dirX * trailDistance;
+        const trailY = player.y - data.dirY * trailDistance;
+
+        trail.fillCircle(trailX, trailY, 20);
+        this.tweens.add({
+          targets: trail,
+          alpha: 0,
+          scaleX: 1.5,
+          scaleY: 1.5,
+          duration: 300,
+          onComplete: () => trail.destroy()
+        });
+      }
+    });
+
+    // Bumper Balls player elimination
+    this.socketManager.onBumperBallsPlayerEliminated((data) => {
+      console.log(`Player ${data.playerId} eliminated!`);
+      this.deadPlayers.add(data.playerId);
+
+      const player = data.playerId === this.localPlayerId
+        ? this.localPlayer
+        : this.remotePlayers.get(data.playerId);
+
+      if (player) {
+        // Fall off animation
+        this.tweens.add({
+          targets: player,
+          alpha: 0,
+          scaleX: 0.5,
+          scaleY: 0.5,
+          duration: 500,
+          ease: 'Power2'
+        });
+      }
+    });
+
     // Game ended - transition to results
     this.socketManager.onGameEnded((results) => {
       console.log('Game ended. Results:', results);
@@ -231,9 +335,57 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  private createArena(): void {
+    const centerX = 400;
+    const centerY = 300;
+    const arenaRadius = 280;
+
+    this.arenaGraphics = this.add.graphics();
+
+    // Ice surface (light blue fill)
+    this.arenaGraphics.fillStyle(0xd0f0ff, 0.3);
+    this.arenaGraphics.fillCircle(centerX, centerY, arenaRadius);
+
+    // Arena border (thick white stroke)
+    this.arenaGraphics.lineStyle(8, 0xffffff, 1);
+    this.arenaGraphics.strokeCircle(centerX, centerY, arenaRadius);
+
+    // Danger zone indicator (red glow near edge)
+    this.arenaGraphics.lineStyle(4, 0xff0000, 0.5);
+    this.arenaGraphics.strokeCircle(centerX, centerY, arenaRadius - 10);
+
+    // Ice texture effects (decorative lines)
+    this.arenaGraphics.lineStyle(1, 0xffffff, 0.2);
+
+    // Draw radial ice cracks
+    for (let i = 0; i < 8; i++) {
+      const angle = (Math.PI * 2 * i) / 8;
+      const x1 = centerX + Math.cos(angle) * 50;
+      const y1 = centerY + Math.sin(angle) * 50;
+      const x2 = centerX + Math.cos(angle) * (arenaRadius - 20);
+      const y2 = centerY + Math.sin(angle) * (arenaRadius - 20);
+      this.arenaGraphics.lineBetween(x1, y1, x2, y2);
+    }
+
+    // Draw concentric circles for depth
+    this.arenaGraphics.strokeCircle(centerX, centerY, arenaRadius * 0.3);
+    this.arenaGraphics.strokeCircle(centerX, centerY, arenaRadius * 0.6);
+
+    // Set arena behind players
+    this.arenaGraphics.setDepth(-2);
+  }
+
   update(time: number, delta: number): void {
     if (!this.localPlayer) {
       return;
+    }
+
+    // Update dash cooldown
+    if (this.dashCooldown > 0) {
+      this.dashCooldown -= delta;
+      if (this.dashCooldown < 0) {
+        this.dashCooldown = 0;
+      }
     }
 
     // If player is dead, don't allow movement
@@ -256,17 +408,57 @@ export class GameScene extends Phaser.Scene {
       dy = 1;
     }
 
-    if (dx !== 0 || dy !== 0) {
-      const magnitude = Math.sqrt(dx * dx + dy * dy);
-      this.localPlayerX += (dx / magnitude) * this.playerSpeed * (delta / 1000);
-      this.localPlayerY += (dy / magnitude) * this.playerSpeed * (delta / 1000);
+    // Check if we're playing Bumper Balls
+    if (this.minigameConfig && this.minigameConfig.name === 'Bumper Balls') {
+      // Normalize diagonal movement
+      if (dx !== 0 && dy !== 0) {
+        const magnitude = Math.sqrt(2);
+        dx /= magnitude;
+        dy /= magnitude;
+      }
 
-      this.localPlayerX = Phaser.Math.Clamp(this.localPlayerX, 16, 784);
-      this.localPlayerY = Phaser.Math.Clamp(this.localPlayerY, 16, 584);
+      // Send input to server (ALWAYS, even when (0,0) to clear server-side input)
+      this.socketManager.sendBumperBallsInput(dx, dy);
 
-      this.localPlayer.setPosition(this.localPlayerX, this.localPlayerY);
+      // Draw dash cooldown indicator
+      if (this.dashCooldownIndicator) {
+        this.dashCooldownIndicator.clear();
 
-      this.socketManager.sendMove(this.localPlayerX, this.localPlayerY);
+        if (this.dashCooldown > 0) {
+          const cooldownPercent = this.dashCooldown / 1500;
+          const barWidth = 30;
+          const barHeight = 4;
+          const x = this.localPlayerX - barWidth / 2;
+          const y = this.localPlayerY + 25;
+
+          // Background
+          this.dashCooldownIndicator.fillStyle(0x000000, 0.5);
+          this.dashCooldownIndicator.fillRect(x, y, barWidth, barHeight);
+
+          // Cooldown progress
+          this.dashCooldownIndicator.fillStyle(0x00ffff, 1);
+          this.dashCooldownIndicator.fillRect(
+            x,
+            y,
+            barWidth * (1 - cooldownPercent),
+            barHeight
+          );
+        }
+      }
+    } else {
+      // Obstacle Dodge movement (existing behavior)
+      if (dx !== 0 || dy !== 0) {
+        const magnitude = Math.sqrt(dx * dx + dy * dy);
+        this.localPlayerX += (dx / magnitude) * this.playerSpeed * (delta / 1000);
+        this.localPlayerY += (dy / magnitude) * this.playerSpeed * (delta / 1000);
+
+        this.localPlayerX = Phaser.Math.Clamp(this.localPlayerX, 16, 784);
+        this.localPlayerY = Phaser.Math.Clamp(this.localPlayerY, 16, 584);
+
+        this.localPlayer.setPosition(this.localPlayerX, this.localPlayerY);
+
+        this.socketManager.sendMove(this.localPlayerX, this.localPlayerY);
+      }
     }
   }
 
@@ -297,6 +489,17 @@ export class GameScene extends Phaser.Scene {
 
     this.obstacles.forEach(obstacle => obstacle.graphics.destroy());
     this.obstacles.clear();
+
+    // Clean up Bumper Balls graphics
+    if (this.arenaGraphics) {
+      this.arenaGraphics.destroy();
+      this.arenaGraphics = null;
+    }
+
+    if (this.dashCooldownIndicator) {
+      this.dashCooldownIndicator.destroy();
+      this.dashCooldownIndicator = null;
+    }
 
     this.deadPlayers.clear();
   }

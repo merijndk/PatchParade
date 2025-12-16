@@ -7,5 +7,15 @@
     "gapSize": 64,
     "barWidth": 40,
     "barHeight": 600
+  },
+  "bumperBalls": {
+    "name": "Bumper Balls",
+    "arenaRadius": 280,
+    "moveAcceleration": 1000,
+    "friction": 0.92,
+    "maxSpeed": 500,
+    "dashSpeed": 900,
+    "dashCooldown": 1500,
+    "dashDuration": 200
   }
 }

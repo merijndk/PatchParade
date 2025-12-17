@@ -11,6 +11,10 @@ interface BumperBallsConfig {
   dashSpeed: number;
   dashCooldown: number;
   dashDuration: number;
+  windSpawnChance: number;
+  windForceMagnitude: number;
+  windDuration: number;
+  windInitialDelay: number;
 }
 
 interface PlayerPhysics {
@@ -21,10 +25,22 @@ interface PlayerPhysics {
   isDashing: boolean;
 }
 
+interface WindState {
+  isActive: boolean;
+  dirX: number;
+  dirY: number;
+  forceX: number;
+  forceY: number;
+  remainingTime: number;
+}
+
 export class BumperBallsManager {
   private playerPhysics: Map<string, PlayerPhysics> = new Map();
   private config: BumperBallsConfig;
   private playerInputs: Map<string, { dirX: number; dirY: number }> = new Map();
+  private windState: WindState | null = null;
+  private timeSinceGameStart: number = 0;
+  private windSpawnAccumulator: number = 0;
 
   constructor(config: BumperBallsConfig) {
     this.config = config;
@@ -80,8 +96,51 @@ export class BumperBallsManager {
   ): {
     eliminatedPlayers: string[];
     physicsState: Map<string, PlayerPhysics>;
+    windStarted?: { dirX: number; dirY: number };
+    windEnded?: boolean;
   } {
     const eliminatedPlayers: string[] = [];
+    let windStarted: { dirX: number; dirY: number } | undefined;
+    let windEnded: boolean = false;
+
+    // Wind management
+    this.timeSinceGameStart += deltaTime;
+
+    // Wind logic (only after initial delay)
+    if (this.timeSinceGameStart >= this.config.windInitialDelay / 1000) {
+      if (this.windState && this.windState.isActive) {
+        // Update active wind
+        this.windState.remainingTime -= deltaTime * 1000;
+        if (this.windState.remainingTime <= 0) {
+          this.windState = null;
+          windEnded = true;
+        }
+      } else {
+        // Try to spawn new wind
+        this.windSpawnAccumulator += deltaTime;
+        if (this.windSpawnAccumulator >= 1.0) {
+          this.windSpawnAccumulator = 0;
+
+          // 15% chance to spawn
+          if (Math.random() < this.config.windSpawnChance) {
+            const angle = Math.random() * Math.PI * 2;
+            const dirX = Math.cos(angle);
+            const dirY = Math.sin(angle);
+
+            this.windState = {
+              isActive: true,
+              dirX,
+              dirY,
+              forceX: dirX * this.config.windForceMagnitude,
+              forceY: dirY * this.config.windForceMagnitude,
+              remainingTime: this.config.windDuration
+            };
+
+            windStarted = { dirX, dirY };
+          }
+        }
+      }
+    }
 
     // 1. Apply input acceleration and friction
     this.playerPhysics.forEach((physics, playerId) => {
@@ -101,6 +160,12 @@ export class BumperBallsManager {
       // Apply friction
       physics.velocityX *= this.config.friction;
       physics.velocityY *= this.config.friction;
+
+      // Apply wind force (if active)
+      if (this.windState && this.windState.isActive) {
+        physics.velocityX += this.windState.forceX * deltaTime;
+        physics.velocityY += this.windState.forceY * deltaTime;
+      }
 
       // Clamp to max speed
       const speed = Math.sqrt(physics.velocityX ** 2 + physics.velocityY ** 2);
@@ -152,6 +217,8 @@ export class BumperBallsManager {
     return {
       eliminatedPlayers,
       physicsState: this.playerPhysics,
+      windStarted,
+      windEnded
     };
   }
 
@@ -229,5 +296,8 @@ export class BumperBallsManager {
   reset(): void {
     this.playerPhysics.clear();
     this.playerInputs.clear();
+    this.windState = null;
+    this.timeSinceGameStart = 0;
+    this.windSpawnAccumulator = 0;
   }
 }

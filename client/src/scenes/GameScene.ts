@@ -30,6 +30,8 @@ export class GameScene extends Phaser.Scene {
   private dashCooldown: number = 0;
   private arenaGraphics: Phaser.GameObjects.Graphics | null = null;
   private dashCooldownIndicator: Phaser.GameObjects.Graphics | null = null;
+  private windArrows: Phaser.GameObjects.Graphics | null = null;
+  private windIndicatorText: Phaser.GameObjects.Text | null = null;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -273,8 +275,8 @@ export class GameScene extends Phaser.Scene {
         this.tweens.add({
           targets: trail,
           alpha: 0,
-          scaleX: 1.5,
-          scaleY: 1.5,
+          x: trail.x - data.dirX * 60,    // Move away from dash direction
+          y: trail.y - data.dirY * 60,    // Move away from dash direction
           duration: 300,
           onComplete: () => trail.destroy()
         });
@@ -301,6 +303,15 @@ export class GameScene extends Phaser.Scene {
           ease: 'Power2'
         });
       }
+    });
+
+    // Wind events
+    this.socketManager.onWindStarted((data) => {
+      this.showWindEffect(data.dirX, data.dirY);
+    });
+
+    this.socketManager.onWindEnded(() => {
+      this.clearWindEffect();
     });
 
     // Game ended - transition to results
@@ -475,6 +486,103 @@ export class GameScene extends Phaser.Scene {
     this.remotePlayers.set(player.id, graphics);
   }
 
+  private showWindEffect(dirX: number, dirY: number): void {
+    // Clear any existing wind visuals
+    this.clearWindEffect();
+
+    // Create wind arrows
+    this.windArrows = this.add.graphics();
+    this.windArrows.setDepth(-1); // Behind players
+
+    // Draw multiple arrows showing wind direction
+    const arrowCount = 8;
+    const arenaRadius = 280;
+    const arrowLength = 40;
+    const arrowAngle = Math.atan2(dirY, dirX);
+
+    this.windArrows.lineStyle(3, 0xffffff, 0.6);
+
+    for (let i = 0; i < arrowCount; i++) {
+      const angle = (Math.PI * 2 / arrowCount) * i;
+      const distance = arenaRadius * 0.7;
+      const centerX = 400 + Math.cos(angle) * distance;
+      const centerY = 300 + Math.sin(angle) * distance;
+
+      // Arrow line
+      const startX = centerX - Math.cos(arrowAngle) * arrowLength / 2;
+      const startY = centerY - Math.sin(arrowAngle) * arrowLength / 2;
+      const endX = centerX + Math.cos(arrowAngle) * arrowLength / 2;
+      const endY = centerY + Math.sin(arrowAngle) * arrowLength / 2;
+
+      this.windArrows.lineBetween(startX, startY, endX, endY);
+
+      // Arrow head
+      const headLength = 10;
+      const headAngle = Math.PI / 6;
+
+      this.windArrows.lineBetween(
+        endX,
+        endY,
+        endX - Math.cos(arrowAngle - headAngle) * headLength,
+        endY - Math.sin(arrowAngle - headAngle) * headLength
+      );
+
+      this.windArrows.lineBetween(
+        endX,
+        endY,
+        endX - Math.cos(arrowAngle + headAngle) * headLength,
+        endY - Math.sin(arrowAngle + headAngle) * headLength
+      );
+    }
+
+    // Wind indicator text
+    this.windIndicatorText = this.add.text(400, 50, 'WIND ACTIVE!', {
+      fontSize: '24px',
+      color: '#ffffff',
+      fontStyle: 'bold',
+      stroke: '#000000',
+      strokeThickness: 4
+    });
+    this.windIndicatorText.setOrigin(0.5);
+    this.windIndicatorText.setDepth(10);
+
+    // Fade in animation
+    this.windArrows.setAlpha(0);
+    this.windIndicatorText.setAlpha(0);
+
+    this.tweens.add({
+      targets: [this.windArrows, this.windIndicatorText],
+      alpha: 1,
+      duration: 300
+    });
+  }
+
+  private clearWindEffect(): void {
+    if (this.windArrows) {
+      this.tweens.add({
+        targets: this.windArrows,
+        alpha: 0,
+        duration: 300,
+        onComplete: () => {
+          this.windArrows?.destroy();
+          this.windArrows = null;
+        }
+      });
+    }
+
+    if (this.windIndicatorText) {
+      this.tweens.add({
+        targets: this.windIndicatorText,
+        alpha: 0,
+        duration: 300,
+        onComplete: () => {
+          this.windIndicatorText?.destroy();
+          this.windIndicatorText = null;
+        }
+      });
+    }
+  }
+
   shutdown(): void {
     // Clean up socket listeners when scene is stopped
     this.socketManager.removeAllListeners();
@@ -500,6 +608,9 @@ export class GameScene extends Phaser.Scene {
       this.dashCooldownIndicator.destroy();
       this.dashCooldownIndicator = null;
     }
+
+    // Clean up wind visuals
+    this.clearWindEffect();
 
     this.deadPlayers.clear();
   }

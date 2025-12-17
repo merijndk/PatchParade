@@ -156,6 +156,14 @@ export class SocketManager {
     this.socket.on('minigame:bumper-balls:player-eliminated', callback);
   }
 
+  onWindStarted(callback: (data: { dirX: number; dirY: number }) => void): void {
+    this.socket.on('minigame:bumper-balls:wind-started', callback);
+  }
+
+  onWindEnded(callback: () => void): void {
+    this.socket.on('minigame:bumper-balls:wind-ended', callback);
+  }
+
   // Clean up all event listeners (but keep socket connection alive)
   removeAllListeners(): void {
     this.socket.off('player:welcome');
@@ -179,6 +187,8 @@ export class SocketManager {
     this.socket.off('minigame:bumper-balls:physics-update');
     this.socket.off('minigame:bumper-balls:dash-activated');
     this.socket.off('minigame:bumper-balls:player-eliminated');
+    this.socket.off('minigame:bumper-balls:wind-started');
+    this.socket.off('minigame:bumper-balls:wind-ended');
   }
 
   disconnect(): void {

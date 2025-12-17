@@ -230,6 +230,10 @@ export class GameStateManager {
           dashSpeed: this.minigameConfig.dashSpeed!,
           dashCooldown: this.minigameConfig.dashCooldown!,
           dashDuration: this.minigameConfig.dashDuration!,
+          windSpawnChance: this.minigameConfig.windSpawnChance!,
+          windForceMagnitude: this.minigameConfig.windForceMagnitude!,
+          windDuration: this.minigameConfig.windDuration!,
+          windInitialDelay: this.minigameConfig.windInitialDelay!,
         });
 
         // Initialize physics for all players
@@ -333,6 +337,17 @@ export class GameStateManager {
             playerId,
           });
         });
+
+        // Broadcast wind events
+        if (result.windStarted) {
+          this.io.emit("minigame:bumper-balls:wind-started", {
+            dirX: result.windStarted.dirX,
+            dirY: result.windStarted.dirY
+          });
+        }
+        if (result.windEnded) {
+          this.io.emit("minigame:bumper-balls:wind-ended");
+        }
 
         // Broadcast physics state to all clients
         const physicsUpdate: Record<string, any> = {};

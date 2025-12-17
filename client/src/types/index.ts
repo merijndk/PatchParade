@@ -44,6 +44,11 @@ export interface MinigameConfig {
   dashSpeed?: number;
   dashCooldown?: number;
   dashDuration?: number;
+  // Wind (Bumper Balls)
+  windSpawnChance?: number;
+  windForceMagnitude?: number;
+  windDuration?: number;
+  windInitialDelay?: number;
 }
 
 export interface PhysicsStateUpdate {
@@ -92,6 +97,8 @@ export interface ServerToClientEvents {
   'minigame:bumper-balls:physics-update': (data: Record<string, PhysicsStateUpdate>) => void;
   'minigame:bumper-balls:dash-activated': (data: { playerId: string; dirX: number; dirY: number }) => void;
   'minigame:bumper-balls:player-eliminated': (data: { playerId: string }) => void;
+  'minigame:bumper-balls:wind-started': (data: { dirX: number; dirY: number }) => void;
+  'minigame:bumper-balls:wind-ended': () => void;
 }
 
 export interface ClientToServerEvents {

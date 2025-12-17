@@ -16,6 +16,10 @@
     "maxSpeed": 500,
     "dashSpeed": 900,
     "dashCooldown": 1500,
-    "dashDuration": 200
+    "dashDuration": 200,
+    "windSpawnChance": 0.15,
+    "windForceMagnitude": 400,
+    "windDuration": 5000,
+    "windInitialDelay": 10000
   }
 }

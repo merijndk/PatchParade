@@ -82,6 +82,24 @@ io.on('connection', (socket) => {
     gameState.updateBumperBallsInput(socket.id, data.dirX, data.dirY);
   });
 
+  // Mining Madness specific events
+  socket.on('minigame:mining-madness:start-mining', (rockId) => {
+    if (gameState.startMining(socket.id, rockId)) {
+      // Start monitoring mining progress
+      const progressInterval = setInterval(() => {
+        if (gameState.isPlayerMining(socket.id, rockId)) {
+          gameState.updateMiningProgress(rockId, socket.id);
+        } else {
+          clearInterval(progressInterval);
+        }
+      }, 100); // Update every 100ms
+    }
+  });
+
+  socket.on('minigame:mining-madness:stop-mining', (rockId) => {
+    gameState.stopMining(rockId, socket.id);
+  });
+
   socket.on('disconnect', () => {
     console.log(`Player disconnected: ${socket.id}`);
     gameState.removePlayer(socket.id);

@@ -66,6 +66,15 @@ export class SocketManager {
     this.socket.emit('minigame:bumper-balls:input', { dirX, dirY });
   }
 
+  // Mining Madness events
+  sendStartMining(rockId: string): void {
+    this.socket.emit('minigame:mining-madness:start-mining', rockId);
+  }
+
+  sendStopMining(rockId: string): void {
+    this.socket.emit('minigame:mining-madness:stop-mining', rockId);
+  }
+
   // Player events
   onWelcome(callback: (data: { playerId: string; players: Record<string, PlayerState>; availableMinigames: import('../types').MinigameInfo[] }) => void): void {
     this.socket.on('player:welcome', callback);
@@ -148,7 +157,7 @@ export class SocketManager {
     this.socket.on('minigame:bumper-balls:physics-update', callback);
   }
 
-  onBumperBallsDashActivated(callback: (data: { playerId: string }) => void): void {
+  onBumperBallsDashActivated(callback: (data: { playerId: string; dirX: number; dirY: number }) => void): void {
     this.socket.on('minigame:bumper-balls:dash-activated', callback);
   }
 
@@ -162,6 +171,23 @@ export class SocketManager {
 
   onWindEnded(callback: () => void): void {
     this.socket.on('minigame:bumper-balls:wind-ended', callback);
+  }
+
+  // Mining Madness events
+  onMiningMadnessRocksSpawned(callback: (rocks: Record<string, import('../types').RockState>) => void): void {
+    this.socket.on('minigame:mining-madness:rocks-spawned', callback);
+  }
+
+  onMiningMadnessRockMined(callback: (data: { rockId: string; playerId: string; score: number }) => void): void {
+    this.socket.on('minigame:mining-madness:rock-mined', callback);
+  }
+
+  onMiningMadnessRockRecharged(callback: (rockId: string) => void): void {
+    this.socket.on('minigame:mining-madness:rock-recharged', callback);
+  }
+
+  onMiningMadnessMiningProgress(callback: (data: { rockId: string; playerId: string; progress: number }) => void): void {
+    this.socket.on('minigame:mining-madness:mining-progress', callback);
   }
 
   // Clean up all event listeners (but keep socket connection alive)
@@ -189,6 +215,10 @@ export class SocketManager {
     this.socket.off('minigame:bumper-balls:player-eliminated');
     this.socket.off('minigame:bumper-balls:wind-started');
     this.socket.off('minigame:bumper-balls:wind-ended');
+    this.socket.off('minigame:mining-madness:rocks-spawned');
+    this.socket.off('minigame:mining-madness:rock-mined');
+    this.socket.off('minigame:mining-madness:rock-recharged');
+    this.socket.off('minigame:mining-madness:mining-progress');
   }
 
   disconnect(): void {

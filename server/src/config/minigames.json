@@ -21,5 +21,13 @@
     "windForceMagnitude": 400,
     "windDuration": 5000,
     "windInitialDelay": 10000
+  },
+  "miningMadness": {
+    "name": "Mining Madness",
+    "gameDuration": 30000,
+    "miningTime": 2000,
+    "rechargeTime": 6000,
+    "rockCount": 8,
+    "rockValue": 1
   }
 }

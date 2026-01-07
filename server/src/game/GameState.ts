@@ -9,9 +9,13 @@ export class GameState {
   addPlayer(id: string): PlayerState {
     const player: PlayerState = {
       id,
+      name: "", // Will be set later
       x: this.generateRandomX(),
       y: this.generateRandomY(),
       color: this.generateRandomColor(),
+      isReady: false,
+      isAlive: true,
+      points: 0,
     };
 
     this.players.set(id, player);

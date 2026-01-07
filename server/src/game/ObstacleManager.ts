@@ -79,7 +79,7 @@ export class ObstacleManager {
   }
 
   // Check if player collides with any obstacle
-  checkCollision(playerId: string, playerX: number, playerY: number, playerRadius: number): boolean {
+  checkCollision(_playerId: string, playerX: number, playerY: number, playerRadius: number): boolean {
     for (const obstacle of this.obstacles.values()) {
       if (this.isPlayerCollidingWithObstacle(playerX, playerY, playerRadius, obstacle)) {
         return true;

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { SocketManager } from '../network/SocketManager';
-import type { PlayerState, ObstacleState, MinigameConfig } from '../types';
+import type { PlayerState, ObstacleState, RockState, MinigameConfig } from '../types';
 
 export class GameScene extends Phaser.Scene {
   private socketManager!: SocketManager;
@@ -18,12 +18,10 @@ export class GameScene extends Phaser.Scene {
   private playerSpeed: number = 200;
   private localPlayerX: number = 0;
   private localPlayerY: number = 0;
-  private localPlayerColor: number = 0xffffff;
 
   // Minigame state
   private obstacles: Map<string, { graphics: Phaser.GameObjects.Graphics; state: ObstacleState }> = new Map();
   private deadPlayers: Set<string> = new Set();
-  private gameStartTime: number = 0;
   private minigameConfig: MinigameConfig | null = null;
 
   // Bumper Balls state
@@ -32,6 +30,11 @@ export class GameScene extends Phaser.Scene {
   private dashCooldownIndicator: Phaser.GameObjects.Graphics | null = null;
   private windArrows: Phaser.GameObjects.Graphics | null = null;
   private windIndicatorText: Phaser.GameObjects.Text | null = null;
+
+  // Mining Madness state
+  private rocks: Map<string, { graphics: Phaser.GameObjects.Graphics; state: RockState; progressBar?: Phaser.GameObjects.Graphics }> = new Map();
+  private miningProgress: Map<string, number> = new Map(); // rockId -> progress (0-1)
+  private currentMiningRock: string | null = null;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -69,7 +72,6 @@ export class GameScene extends Phaser.Scene {
       if (localPlayerState) {
         this.localPlayerX = localPlayerState.x;
         this.localPlayerY = localPlayerState.y;
-        this.localPlayerColor = localPlayerState.color;
 
         this.localPlayer = this.createPlayerGraphics(localPlayerState.color);
         this.localPlayer.setPosition(this.localPlayerX, this.localPlayerY);
@@ -116,7 +118,6 @@ export class GameScene extends Phaser.Scene {
     this.socketManager.onGameStarted((data) => {
       console.log('Minigame started:', data.config.name);
       this.minigameConfig = data.config;
-      this.gameStartTime = Date.now();
       this.deadPlayers.clear();
       this.obstacles.clear();
 
@@ -127,13 +128,17 @@ export class GameScene extends Phaser.Scene {
         this.dashCooldownIndicator.setDepth(10);
       }
 
+      // Initialize Mining Madness
+      if (data.config.name === 'Mining Madness') {
+        this.initializeMiningMadness();
+      }
+
       // Initialize players from game start data
       Object.entries(data.players).forEach(([id, player]) => {
         if (id === this.localPlayerId) {
           // Create local player
           this.localPlayerX = player.x;
           this.localPlayerY = player.y;
-          this.localPlayerColor = player.color;
 
           // Always create a fresh graphics object
           if (this.localPlayer) {
@@ -314,6 +319,23 @@ export class GameScene extends Phaser.Scene {
       this.clearWindEffect();
     });
 
+    // Mining Madness events
+    this.socketManager.onMiningMadnessRocksSpawned((rocks) => {
+      this.createRocks(rocks);
+    });
+
+    this.socketManager.onMiningMadnessRockMined((data) => {
+      this.onRockMined(data.rockId, data.playerId, data.score);
+    });
+
+    this.socketManager.onMiningMadnessRockRecharged((rockId) => {
+      this.onRockRecharged(rockId);
+    });
+
+    this.socketManager.onMiningMadnessMiningProgress((data) => {
+      this.updateMiningProgress(data.rockId, data.playerId, data.progress);
+    });
+
     // Game ended - transition to results
     this.socketManager.onGameEnded((results) => {
       console.log('Game ended. Results:', results);
@@ -384,93 +406,6 @@ export class GameScene extends Phaser.Scene {
 
     // Set arena behind players
     this.arenaGraphics.setDepth(-2);
-  }
-
-  update(time: number, delta: number): void {
-    if (!this.localPlayer) {
-      return;
-    }
-
-    // Update dash cooldown
-    if (this.dashCooldown > 0) {
-      this.dashCooldown -= delta;
-      if (this.dashCooldown < 0) {
-        this.dashCooldown = 0;
-      }
-    }
-
-    // If player is dead, don't allow movement
-    if (this.deadPlayers.has(this.localPlayerId)) {
-      return;
-    }
-
-    let dx = 0;
-    let dy = 0;
-
-    if (this.cursors.left.isDown || this.wasdKeys.A.isDown) {
-      dx = -1;
-    } else if (this.cursors.right.isDown || this.wasdKeys.D.isDown) {
-      dx = 1;
-    }
-
-    if (this.cursors.up.isDown || this.wasdKeys.W.isDown) {
-      dy = -1;
-    } else if (this.cursors.down.isDown || this.wasdKeys.S.isDown) {
-      dy = 1;
-    }
-
-    // Check if we're playing Bumper Balls
-    if (this.minigameConfig && this.minigameConfig.name === 'Bumper Balls') {
-      // Normalize diagonal movement
-      if (dx !== 0 && dy !== 0) {
-        const magnitude = Math.sqrt(2);
-        dx /= magnitude;
-        dy /= magnitude;
-      }
-
-      // Send input to server (ALWAYS, even when (0,0) to clear server-side input)
-      this.socketManager.sendBumperBallsInput(dx, dy);
-
-      // Draw dash cooldown indicator
-      if (this.dashCooldownIndicator) {
-        this.dashCooldownIndicator.clear();
-
-        if (this.dashCooldown > 0) {
-          const cooldownPercent = this.dashCooldown / 1500;
-          const barWidth = 30;
-          const barHeight = 4;
-          const x = this.localPlayerX - barWidth / 2;
-          const y = this.localPlayerY + 25;
-
-          // Background
-          this.dashCooldownIndicator.fillStyle(0x000000, 0.5);
-          this.dashCooldownIndicator.fillRect(x, y, barWidth, barHeight);
-
-          // Cooldown progress
-          this.dashCooldownIndicator.fillStyle(0x00ffff, 1);
-          this.dashCooldownIndicator.fillRect(
-            x,
-            y,
-            barWidth * (1 - cooldownPercent),
-            barHeight
-          );
-        }
-      }
-    } else {
-      // Obstacle Dodge movement (existing behavior)
-      if (dx !== 0 || dy !== 0) {
-        const magnitude = Math.sqrt(dx * dx + dy * dy);
-        this.localPlayerX += (dx / magnitude) * this.playerSpeed * (delta / 1000);
-        this.localPlayerY += (dy / magnitude) * this.playerSpeed * (delta / 1000);
-
-        this.localPlayerX = Phaser.Math.Clamp(this.localPlayerX, 16, 784);
-        this.localPlayerY = Phaser.Math.Clamp(this.localPlayerY, 16, 584);
-
-        this.localPlayer.setPosition(this.localPlayerX, this.localPlayerY);
-
-        this.socketManager.sendMove(this.localPlayerX, this.localPlayerY);
-      }
-    }
   }
 
   private createPlayerGraphics(color: number): Phaser.GameObjects.Graphics {
@@ -612,6 +547,248 @@ export class GameScene extends Phaser.Scene {
     // Clean up wind visuals
     this.clearWindEffect();
 
+    // Clean up Mining Madness graphics
+    this.rocks.forEach(rock => {
+      rock.graphics.destroy();
+      if (rock.progressBar) {
+        rock.progressBar.destroy();
+      }
+    });
+    this.rocks.clear();
+    this.miningProgress.clear();
+    this.currentMiningRock = null;
+
     this.deadPlayers.clear();
+  }
+
+  // Mining Madness methods
+  private initializeMiningMadness(): void {
+    // Clear any existing rocks
+    this.rocks.forEach(rock => {
+      rock.graphics.destroy();
+      if (rock.progressBar) {
+        rock.progressBar.destroy();
+      }
+    });
+    this.rocks.clear();
+    this.miningProgress.clear();
+    this.currentMiningRock = null;
+  }
+
+  private createRocks(rocks: Record<string, RockState>): void {
+    Object.entries(rocks).forEach(([rockId, rockState]) => {
+      this.createRock(rockId, rockState);
+    });
+  }
+
+  private createRock(rockId: string, rockState: RockState): void {
+    const graphics = this.add.graphics();
+    graphics.setDepth(1);
+
+    // Draw rock as a gray circle
+    graphics.fillStyle(0x666666, 1);
+    graphics.fillCircle(0, 0, 20);
+
+    // Position the rock
+    graphics.setPosition(rockState.x, rockState.y);
+
+    this.rocks.set(rockId, {
+      graphics,
+      state: rockState
+    });
+  }
+
+  private onRockMined(rockId: string, playerId: string, score: number): void {
+    const rock = this.rocks.get(rockId);
+    if (rock) {
+      // Change rock color to indicate it's mined (red)
+      rock.graphics.clear();
+      rock.graphics.fillStyle(0xff0000, 0.5);
+      rock.graphics.fillCircle(0, 0, 20);
+
+      rock.state.isAvailable = false;
+
+      // Clear any progress bar
+      if (rock.progressBar) {
+        rock.progressBar.destroy();
+        rock.progressBar = undefined;
+      }
+
+      // If we were mining this rock, stop
+      if (this.currentMiningRock === rockId) {
+        this.currentMiningRock = null;
+        this.socketManager.sendStopMining(rockId);
+      }
+
+      console.log(`Rock ${rockId} mined by ${playerId}, new score: ${score}`);
+    }
+  }
+
+  private onRockRecharged(rockId: string): void {
+    const rock = this.rocks.get(rockId);
+    if (rock) {
+      // Change rock back to available (gray)
+      rock.graphics.clear();
+      rock.graphics.fillStyle(0x666666, 1);
+      rock.graphics.fillCircle(0, 0, 20);
+
+      rock.state.isAvailable = true;
+      rock.state.rechargeTimeRemaining = 0;
+
+      console.log(`Rock ${rockId} recharged and available`);
+    }
+  }
+
+  private updateMiningProgress(rockId: string, playerId: string, progress: number): void {
+    const rock = this.rocks.get(rockId);
+    if (!rock) return;
+
+    // Create or update progress bar
+    if (!rock.progressBar) {
+      rock.progressBar = this.add.graphics();
+      rock.progressBar.setDepth(5);
+    }
+
+    const barWidth = 40;
+    const barHeight = 6;
+    const barX = rock.state.x - barWidth / 2;
+    const barY = rock.state.y - 35;
+
+    rock.progressBar.clear();
+
+    // Background
+    rock.progressBar.fillStyle(0x333333, 0.8);
+    rock.progressBar.fillRect(barX, barY, barWidth, barHeight);
+
+    // Progress fill
+    rock.progressBar.fillStyle(playerId === this.localPlayerId ? 0x00ff00 : 0xffa500, 1);
+    rock.progressBar.fillRect(barX, barY, barWidth * progress, barHeight);
+
+    // Border
+    rock.progressBar.lineStyle(1, 0xffffff, 1);
+    rock.progressBar.strokeRect(barX, barY, barWidth, barHeight);
+  }
+
+  update(_time: number, delta: number): void {
+    // Handle player input and movement
+    this.handleInput(delta);
+
+    // Update Bumper Balls dash cooldown
+    if (this.dashCooldown > 0) {
+      this.dashCooldown -= delta;
+      this.updateDashCooldownIndicator();
+    }
+
+    // Handle Mining Madness mining logic
+    if (this.minigameConfig?.name === 'Mining Madness' && this.currentMiningRock) {
+      const rock = this.rocks.get(this.currentMiningRock);
+      if (rock && rock.state.isAvailable) {
+        // Check if player is still close enough to the rock
+        const distance = Phaser.Math.Distance.Between(
+          this.localPlayerX, this.localPlayerY,
+          rock.state.x, rock.state.y
+        );
+
+        if (distance > 50) { // Stop mining if too far
+          this.socketManager.sendStopMining(this.currentMiningRock);
+          this.currentMiningRock = null;
+        }
+      } else {
+        this.currentMiningRock = null;
+      }
+    }
+  }
+
+  private handleInput(delta: number): void {
+    let moveX = 0;
+    let moveY = 0;
+
+    // WASD or arrow key movement
+    if (this.cursors.left.isDown || this.wasdKeys.A.isDown) moveX = -1;
+    if (this.cursors.right.isDown || this.wasdKeys.D.isDown) moveX = 1;
+    if (this.cursors.up.isDown || this.wasdKeys.W.isDown) moveY = -1;
+    if (this.cursors.down.isDown || this.wasdKeys.S.isDown) moveY = 1;
+
+    // Normalize diagonal movement
+    if (moveX !== 0 && moveY !== 0) {
+      moveX *= 0.707; // 1/sqrt(2)
+      moveY *= 0.707;
+    }
+
+    // Apply movement
+    if (moveX !== 0 || moveY !== 0) {
+      const speed = this.playerSpeed * (delta / 1000); // Convert delta to seconds
+      this.localPlayerX += moveX * speed;
+      this.localPlayerY += moveY * speed;
+
+      // Keep player in bounds
+      this.localPlayerX = Phaser.Math.Clamp(this.localPlayerX, 16, 800 - 16);
+      this.localPlayerY = Phaser.Math.Clamp(this.localPlayerY, 16, 600 - 16);
+
+      this.localPlayer.setPosition(this.localPlayerX, this.localPlayerY);
+      this.socketManager.sendMove(this.localPlayerX, this.localPlayerY);
+
+      // Check for Mining Madness interactions
+      if (this.minigameConfig?.name === 'Mining Madness') {
+        this.checkRockInteractions();
+      }
+    }
+
+    // Bumper Balls dash input
+    if (this.minigameConfig?.name === 'Bumper Balls' && this.shiftKey.isDown && this.dashCooldown <= 0) {
+      this.socketManager.sendDash();
+      this.dashCooldown = this.minigameConfig.dashCooldown! / 1000; // Convert to seconds
+    }
+
+    // Send Bumper Balls input
+    if (this.minigameConfig?.name === 'Bumper Balls') {
+      this.socketManager.sendBumperBallsInput(moveX, moveY);
+    }
+  }
+
+  private updateDashCooldownIndicator(): void {
+    if (this.dashCooldownIndicator) {
+      this.dashCooldownIndicator.clear();
+
+      if (this.dashCooldown > 0) {
+        const cooldownPercent = this.dashCooldown / 1500;
+        const barWidth = 30;
+        const barHeight = 4;
+        const x = this.localPlayerX - barWidth / 2;
+        const y = this.localPlayerY + 25;
+
+        // Background
+        this.dashCooldownIndicator.fillStyle(0x000000, 0.5);
+        this.dashCooldownIndicator.fillRect(x, y, barWidth, barHeight);
+
+        // Cooldown progress
+        this.dashCooldownIndicator.fillStyle(0x00ffff, 1);
+        this.dashCooldownIndicator.fillRect(
+          x,
+          y,
+          barWidth * (1 - cooldownPercent),
+          barHeight
+        );
+      }
+    }
+  }
+
+  private checkRockInteractions(): void {
+    if (this.currentMiningRock) return; // Already mining
+
+    for (const [rockId, rock] of this.rocks) {
+      if (!rock.state.isAvailable) continue;
+
+      const distance = Phaser.Math.Distance.Between(
+        this.localPlayerX, this.localPlayerY,
+        rock.state.x, rock.state.y
+      );
+
+      if (distance <= 30) { // Close enough to start mining
+        this.currentMiningRock = rockId;
+        this.socketManager.sendStartMining(rockId);
+        break;
+      }
+    }
   }
 }

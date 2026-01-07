@@ -24,6 +24,6 @@ const game = new Phaser.Game(config);
 
 // Create a single SocketManager instance and store it in the registry
 // This allows all scenes to share the same socket connection
-const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000';
+const serverUrl = (import.meta as any).env?.VITE_SERVER_URL || 'http://localhost:3000';
 const socketManager = new SocketManager(serverUrl);
 game.registry.set('socketManager', socketManager);

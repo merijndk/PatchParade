@@ -12,6 +12,7 @@ import { LobbyManager } from "./LobbyManager.js";
 import { GamePhaseManager } from "./GamePhaseManager.js";
 import { ObstacleManager } from "./ObstacleManager.js";
 import { BumperBallsManager } from "./BumperBallsManager.js";
+import { MiningMadnessManager } from "./MiningMadnessManager.js";
 import { ConfigLoader } from "../config/ConfigLoader.js";
 
 export class GameStateManager {
@@ -26,6 +27,7 @@ export class GameStateManager {
   // Minigame state
   private obstacleManager: ObstacleManager | null = null;
   private bumperBallsManager: BumperBallsManager | null = null;
+  private miningMadnessManager: MiningMadnessManager | null = null;
   private gameLoopInterval: NodeJS.Timeout | null = null;
   private gameStartTime: number = 0;
   private deathTimes: Map<string, number> = new Map();
@@ -92,7 +94,7 @@ export class GameStateManager {
 
         // Broadcast game start event to all clients with player positions
         this.io.emit("game:started", {
-          config: this.minigameConfig,
+          config: this.minigameConfig!,
           players: this.getAllPlayers(),
         });
 
@@ -181,7 +183,7 @@ export class GameStateManager {
         const availableMinigames = ConfigLoader.getAllMinigames();
         selectedMinigame =
           availableMinigames[
-            Math.floor(Math.random() * availableMinigames.length)
+          Math.floor(Math.random() * availableMinigames.length)
           ];
         console.log(`Random selected: ${selectedMinigame}`);
       }
@@ -210,7 +212,7 @@ export class GameStateManager {
         this.players.forEach((player) => {
           // Spawn players at random positions within the arena
           // Use polar coordinates to ensure spawn within circle
-          const spawnRadius = this.minigameConfig.arenaRadius! * 0.7; // 70% of arena radius
+          const spawnRadius = this.minigameConfig!.arenaRadius! * 0.7; // 70% of arena radius
           const randomAngle = Math.random() * Math.PI * 2;
           const randomDistance = Math.random() * spawnRadius;
 
@@ -264,6 +266,17 @@ export class GameStateManager {
           },
           this.minigameConfig.spawnInterval!,
         );
+      } else if (minigameName === "miningMadness") {
+        // Initialize Mining Madness manager
+        this.miningMadnessManager = new MiningMadnessManager({
+          worldWidth: this.worldWidth,
+          worldHeight: this.worldHeight,
+          gameDuration: this.minigameConfig.gameDuration!,
+          miningTime: this.minigameConfig.miningTime!,
+          rechargeTime: this.minigameConfig.rechargeTime!,
+          rockCount: this.minigameConfig.rockCount!,
+          rockValue: this.minigameConfig.rockValue!,
+        });
       }
 
       this.gameStartTime = Date.now();
@@ -305,9 +318,15 @@ export class GameStateManager {
 
       // Broadcast game start event to all clients with player positions
       this.io.emit("game:started", {
-        config: this.minigameConfig,
+        config: this.minigameConfig!,
         players: this.getAllPlayers(),
       });
+
+      // Initialize minigame-specific data
+      if (this.miningMadnessManager) {
+        const rocks = this.miningMadnessManager.initializeGame();
+        this.io.emit("minigame:mining-madness:rocks-spawned", rocks);
+      }
 
       // NOW start the game loop
       this.startGameLoop();
@@ -410,7 +429,7 @@ export class GameStateManager {
 
         // 5. Broadcast obstacle updates to clients (every frame)
         const allObstacles = this.obstacleManager.getAllObstacles();
-        Object.entries(allObstacles).forEach(([id, obstacle]) => {
+        Object.entries(allObstacles).forEach(([_id, obstacle]) => {
           this.io.emit("minigame:obstacle-dodge:obstacle-update", {
             id: obstacle.id,
             x: obstacle.x,
@@ -423,6 +442,19 @@ export class GameStateManager {
           (p) => p.isAlive,
         ).length;
         if (aliveCount <= 1) {
+          this.endMinigame();
+        }
+      } else if (this.miningMadnessManager) {
+        // Mining Madness game loop
+        const result = this.miningMadnessManager.update(deltaTime);
+
+        // Handle rocks that have recharged
+        result.rocksToRecharge.forEach((rockId) => {
+          this.io.emit("minigame:mining-madness:rock-recharged", rockId);
+        });
+
+        // Check if game should end
+        if (result.gameEnded) {
           this.endMinigame();
         }
       }
@@ -471,70 +503,179 @@ export class GameStateManager {
   }
 
   private awardPoints(): void {
-    const totalPlayers = this.players.size;
+    if (this.miningMadnessManager) {
+      // For Mining Madness, award points based on rocks mined
+      const finalScores = this.miningMadnessManager.getFinalScores();
 
-    // Award points based on death order (1st death = 1 point, 2nd = 2, etc.)
-    this.deathOrder.forEach((playerId, index) => {
-      const player = this.players.get(playerId);
-      if (player) {
-        const points = index + 1; // 1-indexed
-        player.points += points;
+      // Sort players by score (highest first)
+      const sortedPlayers = Array.from(finalScores.entries())
+        .sort(([, scoreA], [, scoreB]) => scoreB - scoreA);
+
+      // Award points: 1st place gets totalPlayers points, 2nd gets totalPlayers-1, etc.
+      sortedPlayers.forEach(([playerId, score], index) => {
+        const player = this.players.get(playerId);
+        if (player) {
+          const points = this.players.size - index;
+          player.points += points;
+          console.log(
+            `Player ${playerId} mined ${score} rocks, awarded ${points} points (total: ${player.points})`,
+          );
+        }
+      });
+    } else {
+      // Original logic for other minigames
+      const totalPlayers = this.players.size;
+
+      // Award points based on death order (1st death = 1 point, 2nd = 2, etc.)
+      this.deathOrder.forEach((playerId, index) => {
+        const player = this.players.get(playerId);
+        if (player) {
+          const points = index + 1; // 1-indexed
+          player.points += points;
+          console.log(
+            `Player ${playerId} awarded ${points} points (total: ${player.points})`,
+          );
+        }
+      });
+
+      // Award winner (last alive or highest survival time) the maximum points
+      const alivePlayer = Array.from(this.players.values()).find(
+        (p) => p.isAlive,
+      );
+      if (alivePlayer) {
+        alivePlayer.points += totalPlayers;
         console.log(
-          `Player ${playerId} awarded ${points} points (total: ${player.points})`,
+          `Winner ${alivePlayer.id} awarded ${totalPlayers} points (total: ${alivePlayer.points})`,
         );
       }
-    });
-
-    // Award winner (last alive or highest survival time) the maximum points
-    const alivePlayer = Array.from(this.players.values()).find(
-      (p) => p.isAlive,
-    );
-    if (alivePlayer) {
-      alivePlayer.points += totalPlayers;
-      console.log(
-        `Winner ${alivePlayer.id} awarded ${totalPlayers} points (total: ${alivePlayer.points})`,
-      );
     }
   }
 
   private calculateResults(): GameResults {
-    const alivePlayer = Array.from(this.players.values()).find(
-      (p) => p.isAlive,
-    );
-    const totalPlayers = this.players.size;
+    if (this.miningMadnessManager) {
+      // For Mining Madness, rank by mining score
+      const finalScores = this.miningMadnessManager.getFinalScores();
 
-    const rankings = Array.from(this.players.values())
-      .map((player) => {
-        const deathTime = this.deathTimes.get(player.id);
-        const survivalTime = deathTime
-          ? deathTime - this.gameStartTime
-          : Date.now() - this.gameStartTime;
+      const rankings = Array.from(this.players.values())
+        .map((player) => {
+          const survivalTime = Date.now() - this.gameStartTime; // All players "survive" the full game
 
-        // Calculate points awarded this round
-        let pointsAwarded = 0;
-        if (player.isAlive) {
-          pointsAwarded = totalPlayers; // Winner gets max points
-        } else {
-          const deathIndex = this.deathOrder.indexOf(player.id);
-          if (deathIndex !== -1) {
-            pointsAwarded = deathIndex + 1;
+          // Calculate points awarded this round (already done in awardPoints)
+          const pointsAwarded = this.players.size - Array.from(finalScores.entries())
+            .sort(([, scoreA], [, scoreB]) => scoreB - scoreA)
+            .findIndex(([playerId]) => playerId === player.id);
+
+          return {
+            playerId: player.id,
+            playerName: player.name,
+            survivalTime,
+            pointsAwarded,
+            totalPoints: player.points,
+          };
+        })
+        .sort((a, b) => {
+          // Sort by mining score descending
+          const scoreA = finalScores.get(a.playerId) || 0;
+          const scoreB = finalScores.get(b.playerId) || 0;
+          return scoreB - scoreA;
+        });
+
+      const winner = rankings[0]?.playerId ?? null;
+
+      return {
+        winner,
+        rankings,
+      };
+    } else {
+      // Original logic for other minigames
+      const alivePlayer = Array.from(this.players.values()).find(
+        (p) => p.isAlive,
+      );
+      const totalPlayers = this.players.size;
+
+      const rankings = Array.from(this.players.values())
+        .map((player) => {
+          const deathTime = this.deathTimes.get(player.id);
+          const survivalTime = deathTime
+            ? deathTime - this.gameStartTime
+            : Date.now() - this.gameStartTime;
+
+          // Calculate points awarded this round
+          let pointsAwarded = 0;
+          if (player.isAlive) {
+            pointsAwarded = totalPlayers; // Winner gets max points
+          } else {
+            const deathIndex = this.deathOrder.indexOf(player.id);
+            if (deathIndex !== -1) {
+              pointsAwarded = deathIndex + 1;
+            }
           }
-        }
 
-        return {
-          playerId: player.id,
-          playerName: player.name,
-          survivalTime,
-          pointsAwarded,
-          totalPoints: player.points,
-        };
-      })
-      .sort((a, b) => b.survivalTime - a.survivalTime); // Sort by survival time descending
+          return {
+            playerId: player.id,
+            playerName: player.name,
+            survivalTime,
+            pointsAwarded,
+            totalPoints: player.points,
+          };
+        })
+        .sort((a, b) => b.survivalTime - a.survivalTime); // Sort by survival time descending
 
-    return {
-      winner: alivePlayer?.id ?? null,
-      rankings,
-    };
+      return {
+        winner: alivePlayer?.id ?? null,
+        rankings,
+      };
+    }
+  }
+  // Mining Madness methods
+  startMining(playerId: string, rockId: string): boolean {
+    if (!this.miningMadnessManager) {
+      return false;
+    }
+
+    return this.miningMadnessManager.startMining(playerId, rockId);
+  }
+
+  updateMiningProgress(rockId: string, playerId: string): void {
+    if (!this.miningMadnessManager) {
+      return;
+    }
+
+    const result = this.miningMadnessManager.updateMiningProgress(rockId, playerId);
+
+    if (result.completed) {
+      // Mining completed
+      const miningResult = this.miningMadnessManager.completeMining(rockId);
+      if (miningResult) {
+        this.io.emit("minigame:mining-madness:rock-mined", {
+          rockId,
+          playerId: miningResult.playerId,
+          score: miningResult.score,
+        });
+      }
+    } else {
+      // Send progress update
+      this.io.emit("minigame:mining-madness:mining-progress", {
+        rockId,
+        playerId,
+        progress: result.progress,
+      });
+    }
+  }
+
+  stopMining(rockId: string, playerId: string): void {
+    if (this.miningMadnessManager) {
+      this.miningMadnessManager.stopMining(rockId, playerId);
+    }
+  }
+
+  isPlayerMining(playerId: string, rockId: string): boolean {
+    if (!this.miningMadnessManager) {
+      return false;
+    }
+    // Access the private miningProgress map from the manager
+    const progress = (this.miningMadnessManager as any).miningProgress?.get(rockId);
+    return progress && progress.playerId === playerId;
   }
 
   returnToLobby(): void {

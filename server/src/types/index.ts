@@ -27,6 +27,14 @@ export interface ObstacleState {
   speed: number;
 }
 
+export interface RockState {
+  id: string;
+  x: number;
+  y: number;
+  isAvailable: boolean;
+  rechargeTimeRemaining: number;
+}
+
 export interface MinigameConfig {
   name: string;
   // Obstacle Dodge
@@ -49,6 +57,12 @@ export interface MinigameConfig {
   windForceMagnitude?: number;
   windDuration?: number;
   windInitialDelay?: number;
+  // Mining Madness
+  gameDuration?: number;
+  miningTime?: number;
+  rechargeTime?: number;
+  rockCount?: number;
+  rockValue?: number;
 }
 
 export interface PhysicsStateUpdate {
@@ -99,6 +113,10 @@ export interface ServerToClientEvents {
   'minigame:bumper-balls:player-eliminated': (data: { playerId: string }) => void;
   'minigame:bumper-balls:wind-started': (data: { dirX: number; dirY: number }) => void;
   'minigame:bumper-balls:wind-ended': () => void;
+  'minigame:mining-madness:rocks-spawned': (rocks: Record<string, RockState>) => void;
+  'minigame:mining-madness:rock-mined': (data: { rockId: string; playerId: string; score: number }) => void;
+  'minigame:mining-madness:rock-recharged': (rockId: string) => void;
+  'minigame:mining-madness:mining-progress': (data: { rockId: string; playerId: string; progress: number }) => void;
 }
 
 export interface ClientToServerEvents {
@@ -111,4 +129,6 @@ export interface ClientToServerEvents {
   'minigame:ready': () => void;
   'minigame:bumper-balls:dash': () => void;
   'minigame:bumper-balls:input': (data: { dirX: number; dirY: number }) => void;
+  'minigame:mining-madness:start-mining': (rockId: string) => void;
+  'minigame:mining-madness:stop-mining': (rockId: string) => void;
 }

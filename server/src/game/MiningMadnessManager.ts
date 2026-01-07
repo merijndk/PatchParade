@@ -1,3 +1,14 @@
+// Ideas/todo
+// Show scores
+// Go to goals score  i.s.o. time
+// Collison with rocks
+// Collison with each other
+// Possiblity to stun each other, or dump each other
+// Normal rocks that can't be mined to complicate pathing
+// Rocks worth more points, that are also more difficult to mine (e.g 3x points, 2x time)
+// Mining progress decays or dissapears when disconnected
+// less rocks? 
+
 import type { RockState } from "../types/index.js";
 
 interface MiningMadnessConfig {

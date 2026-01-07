@@ -117,6 +117,7 @@ export interface ServerToClientEvents {
   'minigame:mining-madness:rock-mined': (data: { rockId: string; playerId: string; score: number }) => void;
   'minigame:mining-madness:rock-recharged': (rockId: string) => void;
   'minigame:mining-madness:mining-progress': (data: { rockId: string; playerId: string; progress: number }) => void;
+  'minigame:mining-madness:recharge-progress': (data: Record<string, number>) => void;
 }
 
 export interface ClientToServerEvents {

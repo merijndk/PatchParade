@@ -190,6 +190,10 @@ export class SocketManager {
     this.socket.on('minigame:mining-madness:mining-progress', callback);
   }
 
+  onMiningMadnessRechargeProgress(callback: (data: Record<string, number>) => void): void {
+    this.socket.on('minigame:mining-madness:recharge-progress', callback);
+  }
+
   // Clean up all event listeners (but keep socket connection alive)
   removeAllListeners(): void {
     this.socket.off('player:welcome');
@@ -219,6 +223,7 @@ export class SocketManager {
     this.socket.off('minigame:mining-madness:rock-mined');
     this.socket.off('minigame:mining-madness:rock-recharged');
     this.socket.off('minigame:mining-madness:mining-progress');
+    this.socket.off('minigame:mining-madness:recharge-progress');
   }
 
   disconnect(): void {

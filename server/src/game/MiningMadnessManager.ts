@@ -183,4 +183,16 @@ export class MiningMadnessManager {
     getFinalScores(): Map<string, number> {
         return new Map(this.playerScores);
     }
+
+    getRechargeProgress(): Record<string, number> {
+        const progress: Record<string, number> = {};
+        for (const [rockId, rock] of this.rocks) {
+            if (!rock.isAvailable && rock.rechargeTimeRemaining > 0) {
+                // Calculate progress (0 = just mined, 1 = fully recharged)
+                const progressValue = 1 - (rock.rechargeTimeRemaining / this.config.rechargeTime);
+                progress[rockId] = Math.max(0, Math.min(1, progressValue));
+            }
+        }
+        return progress;
+    }
 }

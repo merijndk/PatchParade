@@ -336,6 +336,10 @@ export class GameScene extends Phaser.Scene {
       this.updateMiningProgress(data.rockId, data.playerId, data.progress);
     });
 
+    this.socketManager.onMiningMadnessRechargeProgress((data) => {
+      this.updateRechargeProgress(data);
+    });
+
     // Game ended - transition to results
     this.socketManager.onGameEnded((results) => {
       console.log('Game ended. Results:', results);
@@ -635,6 +639,12 @@ export class GameScene extends Phaser.Scene {
       rock.state.isAvailable = true;
       rock.state.rechargeTimeRemaining = 0;
 
+      // Clear any progress bar
+      if (rock.progressBar) {
+        rock.progressBar.destroy();
+        rock.progressBar = undefined;
+      }
+
       console.log(`Rock ${rockId} recharged and available`);
     }
   }
@@ -667,6 +677,38 @@ export class GameScene extends Phaser.Scene {
     // Border
     rock.progressBar.lineStyle(1, 0xffffff, 1);
     rock.progressBar.strokeRect(barX, barY, barWidth, barHeight);
+  }
+
+  private updateRechargeProgress(rechargeProgress: Record<string, number>): void {
+    Object.entries(rechargeProgress).forEach(([rockId, progress]) => {
+      const rock = this.rocks.get(rockId);
+      if (!rock) return;
+
+      // Create or update recharge progress bar
+      if (!rock.progressBar) {
+        rock.progressBar = this.add.graphics();
+        rock.progressBar.setDepth(5);
+      }
+
+      const barWidth = 40;
+      const barHeight = 6;
+      const barX = rock.state.x - barWidth / 2;
+      const barY = rock.state.y - 35;
+
+      rock.progressBar.clear();
+
+      // Background
+      rock.progressBar.fillStyle(0x333333, 0.8);
+      rock.progressBar.fillRect(barX, barY, barWidth, barHeight);
+
+      // Progress fill (blue for recharge)
+      rock.progressBar.fillStyle(0x0088ff, 1);
+      rock.progressBar.fillRect(barX, barY, barWidth * progress, barHeight);
+
+      // Border
+      rock.progressBar.lineStyle(1, 0xffffff, 1);
+      rock.progressBar.strokeRect(barX, barY, barWidth, barHeight);
+    });
   }
 
   update(_time: number, delta: number): void {

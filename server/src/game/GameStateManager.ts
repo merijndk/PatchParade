@@ -453,6 +453,12 @@ export class GameStateManager {
           this.io.emit("minigame:mining-madness:rock-recharged", rockId);
         });
 
+        // Send recharge progress updates
+        const rechargeProgress = this.miningMadnessManager.getRechargeProgress();
+        if (Object.keys(rechargeProgress).length > 0) {
+          this.io.emit("minigame:mining-madness:recharge-progress", rechargeProgress);
+        }
+
         // Check if game should end
         if (result.gameEnded) {
           this.endMinigame();
